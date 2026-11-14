@@ -1,0 +1,24 @@
+# 기기 설정·로버 설정 (docs/spec/S4_tier_config.md §1)
+# 하드웨어는 하나다. `tier`는 기기 또는 로버의 "설정 묶음 이름"이지 하드웨어 등급이 아니다.
+# 두 프로그램은 같은 코어 라이브러리를 쓰고, 여기 적힌 격자·반경·옵션 수만 다르다.
+version: 1
+tiers:
+  device:                           # 기기 (우주복 쪽 컴퓨터, HPSC급)
+    label: "기기 · HPSC급"
+    grid_m: 5                       # 탐색 격자 = 번들 field/ 레이어의 격자
+    replan_radius_m: 2000           # 탐색 창의 반지름. 목표가 이보다 멀면 창 끝까지만 푼다
+    time_budget_s: 2                # 목표 응답 시간. 호스트가 재서 기록만 한다(코어는 시계를 보지 않는다)
+    max_expansions: 4745326          # 2026-11-14에 이 기기에서 보정 (scripts/calibrate_expansions.py). 기기: Darwin arm64, arm, Python 3.12.13
+    options: {mode: receive, max: 3}   # 선택지를 만들지 않는다. 로버가 보낸 카드를 보이고 귀환 카드만 직접 낸다
+    science_grid_m: bundle          # 번들의 과학 격자 그대로
+
+  rover:                            # 로버 (현장 서버)
+    label: "로버"
+    grid_m: 2                       # 번들 rover/ 레이어의 격자
+    coarse_first_grid_m: 4          # 전역 코스트맵·귀환 필드의 격자. 레이어 격자(2 m)의 정수 배여야 한다
+    replan_radius_m: 5000
+    time_budget_s: 2
+    max_expansions: 4255197          # 2026-11-14에 이 기기에서 보정 (scripts/calibrate_expansions.py). 기기: Darwin arm64, arm, Python 3.12.13
+    options: {mode: pareto, max: 3, min: 2}
+    science_grid_m: 5               # 과학 가치 지도를 5 m 칸으로 다시 나눠 계산한다. 바탕값은 가장 가까운 번들 칸의 값을 복사하므로
+                                    # 정보가 늘지는 않고, 관측·가설의 영향 범위가 더 곱게 그려진다 (S4 §1)

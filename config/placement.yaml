@@ -1,0 +1,38 @@
+# 자동으로 만든 파일이다 (scripts/place_scenario.py). 손으로 고쳐도 된다 — 다시 만들면 덮어쓴다.
+generated_by: scripts/place_scenario.py — 규칙은 그 파일 머리말과 docs/spec/S5 §8
+bundle: jezero_west_v1
+report:
+  flat_link_limit_m: 2064.6
+  standoff_used_m: 1032.3
+  park_to_P2_m: 1037.6
+  link_cells_pct: 18.5
+  P3_outside_link: true
+rover_parks:
+- id: park1
+  xy:
+  - 1757.5
+  - -1167.5
+  note: 배치 규칙 2 — P2와 링크가 되는 완만한 칸
+pois:
+- id: P1
+  name: P1
+  xy:
+  - 1987.5
+  - -1912.5
+  kind: feature
+- id: P2
+  name: P2
+  xy:
+  - 2227.5
+  - -2092.5
+  kind: sample
+- id: P3
+  name: P3
+  xy:
+  - 2407.5
+  - -2332.5
+  kind: feature
+scenario_hint:
+  hyp_anchor: P2
+  hyp_direction_deg: 45
+  hyp_extent_m: 300.0

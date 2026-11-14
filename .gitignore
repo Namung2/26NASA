@@ -1,0 +1,22 @@
+# 도구·빌드 산출물
+.venv/
+build/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+node_modules/
+screen/dist/
+
+# 내려받은 자료와 만든 번들 (크다. 받는 곳은 docs/REFERENCE_BingoTime.md §1.2)
+자료/
+data/raw/
+data/bundles/
+
+# 개인 작업 흔적
+.backup_*/
+docs.zip
+.DS_Store
+reports/
+
+docs/

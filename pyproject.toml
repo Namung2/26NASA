@@ -1,0 +1,42 @@
+# BingoTime — Python 쪽(지상 파이프라인, 두 프로그램의 껍데기, 시뮬레이터, 시험)의 프로젝트 설정.
+# C++ 코어는 여기서 빌드하지 않는다 → 저장소 루트에서 `cmake --preset native` (core/CMakeLists.txt)
+[project]
+name = "bingotime"
+version = "0.1.0"
+description = "화성 선외활동 결정 지원 도구 — 지상 파이프라인과 프로그램 껍데기"
+requires-python = ">=3.12"
+# 2026-11-13에 이 기기에서 설치해 동작을 확인한 판 (docs/spec/S6_timeline.md §1.1)
+dependencies = [
+  "numpy>=2.5",
+  "scipy>=1.18",
+  "rasterio>=1.5",      # GDAL 포함. 고도·광물 래스터 읽기, 재투영, 폴리곤 굽기
+  "pyogrio>=0.13",      # 지질 단위 지오데이터베이스(.gdb) 읽기
+  "PyYAML>=6.0",
+  "pillow",             # 타일·확인용 그림
+  "pydantic>=2.14",
+  "fastapi>=0.162",
+  "uvicorn>=0.54",
+  "websockets>=17",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=9", "ruff>=0.17", "cmake>=4"]
+
+[tool.setuptools]
+packages = ["pipeline", "host"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+  "real: 실제 번들이 필요하다 (환경변수 BT_BUNDLE)",
+  "perf: 시간을 잰다 (기본 제외)",
+  "scenario: 시뮬레이터 시나리오",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+# RUF046("이미 정수인 값에 int()")은 끈다: numpy 값에 round()를 쓰면 numpy 수가 나올 수 있어서 int()를 일부러 둔 곳이다.
+ignore = ["RUF046"]

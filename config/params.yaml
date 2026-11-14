@@ -1,0 +1,112 @@
+# 물리·안전·모델 파라미터 (docs/spec/S4_tier_config.md §2, §3)
+#
+# 모든 항목은 {value, unit, status, source} 꼴이다.
+#   status: REF = 문헌에 출처가 있는 수치 / DESIGN = 설계 문서가 정한 값 / TBD = 문헌에서 뽑아야 하는 값(placeholder로만 실행)
+#           TUNE = 출처 없는 제안 초기값. 데모를 돌려 보며 고친다 — 문헌 수치가 아니다
+# 코어는 이 파일을 읽지 않는다. host/config.py가 읽어 숫자 구조체(bt_config)로 만들어 넘긴다.
+version: 1
+
+suit:
+  eva_max_h:        {value: 8,    unit: h,   status: REF, source: "xEVA ConOps EVA-EXP-0042 Rev B (6±2 h, 최대 8) — REFERENCE §2.1"}
+
+mobility:
+  v_plan_kmh:       {value: 2.0,  unit: km/h, status: REF, source: "xEVA ConOps — REFERENCE §2.1"}
+  v_return_kmh:     {value: 2.7,  unit: km/h, status: REF, source: "ALSJ 아폴로 17 편집자 가정 — REFERENCE §3.1"}
+  slope_model:      {value: apollo_linear_steep_down, status: DESIGN, source: "θ ≥ −10°: v = 0.75 − 0.01·θ m/s (NASA ICES-2025-129 식 2). θ < −10°: 1°마다 9.5 % 감소 (SEXTANT 속도 표). 식은 core/src/mobility.cpp에 있다"}
+  theta_max_deg:    {value: 20,   unit: deg, status: REF, source: "NASA Artemis EVA 시험 요구(20° 경사 보행), NASA ICES-2025-129의 진입 금지 ±20° — REFERENCE §4"}
+
+radiation:
+  dose_rate_mSv_day: {value: 0.67, unit: mSv/day, status: REF, source: "Hassler et al. Science 2013/14 (Curiosity RAD) — REFERENCE §4"}
+  spe_multiplier:    {value: null, placeholder: 10, status: TBD, source: "SCENARIOS §2.2 '배율 설정' — 수치 없음"}
+
+nav:
+  sigma_warn_m:     {value: 50,   unit: m, status: DESIGN, source: "오차 반경이 이 값을 넘으면 화면에 경고"}
+
+decision:
+  obs_to_dp_max_min: {value: 2,    unit: min, status: DESIGN, source: "SCENARIOS §2.3 / §3.3"}
+  metrics_tolerance: {value: 0.05, status: DESIGN, source: "SCENARIOS §3.3"}
+  eps_fork:          {value: 0.10, status: TUNE, source: "분기 트리거의 상대 비용 차"}
+  cooldown_s:        {value: 120,  unit: s,   status: TUNE, source: "같은 (종류, 원인)의 결정 지점을 다시 내지 않는 간격"}
+  stay_max_min:      {value: 20,   unit: min, status: TUNE, source: "머물기 옵션의 길이"}
+  stay_buffer_min:   {value: 2,    unit: min, status: TUNE, source: "머물기 옵션이 남기는 출발 한계 여유"}
+  hyp_snap_m:        {value: 50,   unit: m,   status: TUNE, source: "가설 목표를 찾는 반경"}
+  display_precision: {value: {time_min: 1, max_slope_deg: 1, dose_uSv: 0.1, value: 0.1, value_var: 0.01, info_gain: 0.1, nlt_margin_min: 1, comm_loss_min: 1},
+                      status: DESIGN, source: "S4 §5 — 화면에서 같아 보이는 수치는 계산에서도 같은 값"}
+
+bundle:
+  field_limit_mb:   {value: 50,   unit: MB, status: DESIGN, source: "PRD §7.3"}
+  aoi_radius_max_m: {value: 5000, unit: m,  status: DESIGN, source: "PRD R-01"}
+
+placement:
+  work_radius_m:    {value: 2000, unit: m,  status: REF,    source: "xEVA ConOps 보행 '착륙선에서 ~2 km' — REFERENCE §2.1"}
+  max_from_rover_m: {value: 3500, unit: m,  status: REF,    source: "NASA ICES-2026-127 — REFERENCE §4"}
+  rover_standoff_m: {value: 2000, unit: m,  status: DESIGN, source: "SCENARIOS §3.1"}
+  poi_min_sep_m:    {value: 300,  unit: m,  status: TUNE,   source: "POI 사이 최소 간격"}
+  p2_clear_radius_m: {value: 200, unit: m,  status: TUNE,   source: "발견 지점 주변 통과 가능 비율을 보는 반경"}
+  hyp_probe_m:      {value: 300,  unit: m,  status: TUNE,   source: "가설 방향을 고를 때 살펴보는 거리"}
+
+planner:
+  eps_schedule:     {value: [3.0, 1.5, 1.0], status: TUNE, source: "가중 A* ε 단계"}
+  snap_max_m:       {value: 20,   unit: m, status: TUNE, source: "통과불가 시작·목표의 스냅 한계"}
+  alt_overlap_max:  {value: 0.8,  status: TUNE, source: "대안 경로를 같은 경로로 보는 겹침률"}
+  corridor_m:       {value: 100,  unit: m, status: TUNE, source: "거친 격자 경로 주변을 고운 격자로 다시 푸는 폭"}
+
+cost:
+  profiles:                         # 간선 비용의 가중 (경사, 거칠기, 그림자, 방사선) — SYSTEM §3.1
+    balanced:       {value: [1.0, 0.5, 0.3, 0.1], status: TUNE, source: "성향 0"}
+    fastest:        {value: [1.0, 0.0, 0.0, 0.0], status: TUNE, source: "성향 1 — 대안 경로용"}
+    gentle:         {value: [2.0, 1.0, 0.3, 0.1], status: TUNE, source: "성향 2 — 대안 경로용"}
+  rough_ref_m:      {value: 0.5,  unit: m, status: TUNE, source: "거칠기 정규화 기준"}
+  dose_ref:         {value: 27.9, unit: uSv/h, status: DESIGN, source: "radiation.dose_rate_mSv_day 0.67을 시간당으로 바꾼 값 — 평상시가 1"}
+
+terrain:
+  roughness_win_m:   {value: 15,   unit: m, status: TUNE, source: "거칠기 창"}
+  shadow_bins:       {value: 8,    status: TUNE, source: "그림자 시간 구간 수"}
+  horizon_max_m:     {value: 2000, unit: m, status: TUNE, source: "그림자를 드리울 지형을 찾는 최대 거리"}
+
+science:
+  l0_m:                   {value: 50,     unit: m, status: TUNE, source: "관측이 퍼지는 길이"}
+  aniso_ratio:            {value: 4,      status: TUNE, source: "층서연속 장축/단축"}
+  exposure_slope_ref_deg: {value: 20,     unit: deg, status: TUNE, source: "침식 노출 경사 가중 기준"}
+  obs_noise:              {value: 0.05,   status: TUNE, source: "관측 잡음 분산"}
+  unconfirmed_factor:     {value: 4,      status: TUNE, source: "확인 안 된 관측의 잡음 배율"}
+  tau_s:                  {value: 1800,   unit: s, status: DESIGN, source: "주의 흔적이 살아 있는 시간 — 한 지점의 작업 시간 약 30분에서 유도 (REFERENCE §3.2, §4.3)"}
+  trace_bucket_s:         {value: 60,     unit: s, status: TUNE, source: "지도 재계산을 묶는 시간 폭 (호스트)"}
+  r_obs_m:                {value: 20,     unit: m, status: TUNE, source: "경로에서 관측 가능한 반경"}
+  w_transit:              {value: 0.25,   status: TUNE, source: "통과 구간의 관측 가중"}
+  A_ref_m2:               {value: 400,    unit: m2, status: TUNE, source: "가치 정규화 기준 면적"}
+  r_plan:                 {value: 0.05,   status: TUNE, source: "정보 이득 계산용 가정 잡음"}
+  touch_eps:              {value: 0.05,   status: TUNE, source: "관측이 닿았다고 보는 커널 가중의 하한"}
+  var_floor:              {value: 0.0001, status: TUNE, source: "관측 갱신 뒤 분산의 하한"}
+  default_res_m:          {value: 20,     unit: m, status: TUNE, source: "광물 래스터가 없을 때의 과학 격자"}
+
+env:
+  dust_tau_warn:    {value: 1.0,  status: TUNE, source: "먼지 광학 두께 경고 — 받은 기상 자료를 보고 다시 정한다"}
+
+safety:
+  dose_warn_uSv:     {value: null, unit: uSv, status: TBD, source: "출처 있는 값을 찾기 전에는 비워 둔다 — 비어 있으면 선량은 표시만 한다"}
+  k_return:          {value: 1.0,  status: TUNE, source: "귀환 시간 안전계수"}
+  nlt_warn_min:      {value: 20,   unit: min, status: DESIGN, source: "아폴로 17의 첫 경고가 출발 한계 20분 전 — REFERENCE §3.1"}
+  nlt_force_min:     {value: 7,    unit: min, status: DESIGN, source: "아폴로 17의 마지막 호출 '7분' — REFERENCE §3.1"}
+  sunset_margin_min: {value: 30,   unit: min, status: TUNE, source: "일몰 전 귀환 여유"}
+  sunset_warn_min:   {value: 60,   unit: min, status: TUNE, source: "일몰 경고"}
+
+link:
+  # 로버 ↔ 우주복 UHF 링크가 되는 곳을 번들에 구워 둘 때 쓰는 값 (pipeline/terrain.py link_mask, 근거: REFERENCE §4.4).
+  # 화성 선외활동용 우주복 무선기의 공개된 제원이 없어서 달 탐사 자료의 값을 빌렸다 — 빌린 값이라는 것을 숨기지 않는다.
+  radio:
+    freq_mhz:          {value: 401,   unit: MHz, status: DESIGN, source: "가정. xEVA ConOps는 'UHF'라고만 한다. 401 MHz는 Foore & Ida 2007(NASA/TM-2007-214825)이 달 표면 UHF로 분석한 주파수이고 Perseverance의 UHF 안테나도 약 400 MHz"}
+    antenna_rover_h_m: {value: 3.0,   unit: m,   status: REF,    source: "Foore & Ida 2007의 로버 안테나 높이 3 m. NASA SEV(여압 로버 개념)의 높이 10 ft = 3.05 m(NASA SEV fact sheet). 돛대를 세우면 6~10 m(Hwu 등 2008, LSR-M 2023)"}
+    antenna_suit_h_m:  {value: 2.0,   unit: m,   status: REF,    source: "Foore & Ida 2007, Hwu 등 2008, Nokia 2024가 쓰는 우주인 안테나 높이 2 m. 아폴로는 1.83 m(MSC-05161 Suppl. 6 p. 1-3)"}
+    loss_allow_db:     {value: 126.8, unit: dB,  status: REF,    source: "빌린 값: 아폴로 15 우주복→착륙선 VHF 링크의 실측 한계. 송신 +25.7 dBm, 우주복 안테나 −2.0 dB, 케이블 −1.9 dB, 수신 한계 −105 dBm → 25.7 − 2.0 − 1.9 + 105 = 126.8 dB (NASA MSC-05161 Suppl. 6, 1972, p. 2-7·2-13)"}
+    fade_margin_db:    {value: 9.77,  unit: dB,  status: REF,    source: "Foore & Ida 2007 Table I, 401 MHz 로버(3 m)→우주인(2 m): 평균 3.25 dB + 2 × 표준편차 3.26 dB. 표준편차의 2배(약 95 %)로 잡은 것은 우리 선택. Nokia 2024의 그늘 여유 10 dB와 비슷하다"}
+  hb_hz:            {value: 1,    unit: Hz, status: DESIGN, source: "SYSTEM §3.9"}
+  lost_dp_s:        {value: 120,  unit: s,  status: TUNE, source: "UHF 두절이 이만큼 이어지면 선택지 정지"}
+  uhf:  &channel
+    timeout_ms:     {value: 500,  unit: ms, status: TUNE, source: "하트비트 응답 한계"}
+    n_down:         {value: 5,    status: TUNE, source: "연속 미응답 횟수 — 방식은 RFC 5880과 같고 횟수는 제안값"}
+    n_up:           {value: 3,    status: TUNE, source: "복구 판정 연속 응답 횟수"}
+    ewma_alpha:     {value: 0.3,  status: TUNE, source: "손실률 이동평균"}
+    loss_down:      {value: 0.85, status: TUNE, source: "손실률 임계 — 연속 5번(0.83)보다 먼저 발동하지 않게"}
+    rtt_down_ms:    {value: 400,  unit: ms, status: TUNE, source: "왕복 시간 평균의 임계"}
+  wifi: *channel

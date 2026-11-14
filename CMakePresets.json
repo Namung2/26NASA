@@ -1,0 +1,21 @@
+{
+  "version": 3,
+  "configurePresets": [
+    {
+      "name": "native",
+      "displayName": "코어 공유 라이브러리 (두 프로그램과 시험이 부르는 것)",
+      "binaryDir": "${sourceDir}/build/native",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" }
+    },
+    {
+      "name": "native-asan",
+      "displayName": "AddressSanitizer·UBSan 자체 시험",
+      "binaryDir": "${sourceDir}/build/native-asan",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug", "BT_SANITIZE": "ON" }
+    }
+  ],
+  "buildPresets": [
+    { "name": "native", "configurePreset": "native" },
+    { "name": "native-asan", "configurePreset": "native-asan" }
+  ]
+}
