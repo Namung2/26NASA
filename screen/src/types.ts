@@ -312,6 +312,8 @@ export interface Snapshot {
   plan: Stop[];
   route: [number, number][];
   return_rover: [number, number][];
+  visited: Stop[];
+  track: [number, number][];
   nlt: NltView | null;
   nlt_warn: boolean;
   gauge: GaugeView | null;

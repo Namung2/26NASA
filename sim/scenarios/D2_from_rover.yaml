@@ -1,0 +1,46 @@
+# D2 — 보여 주기용 시나리오: 로버에서 나가서 로버로 돌아오기까지 전부 (docs/spec/S5 §4의 형식)
+#
+# D1은 아폴로 17의 한 장면을 보려고 EVA 도중(4시간 40분), P1에 선 상태에서 시작한다. 그래서 P1은 "이미 끝낸 지점"이고
+# 로버에서 걸어 나오는 구간이 없다. D2는 같은 사건을 EVA 0분, 로버 옆에서 시작해 처음부터 보인다:
+#   로버 출발 → P1 → P2 도착 → 예상 밖의 발견 → 가설 → 가설 옵션 선택 → 연결 끊김 → 끊긴 채로 관측 → 다시 이어짐 → P3 → 귀환.
+# 걸어온 길과 다녀온 지점(P1, P2, P3)이 지도에 처음부터 쌓인다.
+#
+# D1과 다른 점
+#   · 시작: 위치를 적지 않았다 = 로버 주차점. EVA 경과 0분.
+#   · 계획에 P1이 들어 있다. P1에 머무는 시간은 S5 §4의 예시값(20분)이다.
+#   · EVA 0분에서 시작하므로 출발 한계(EVA 최대 8시간)는 멀다. D1의 끝 장면("출발 한계 → 강제 귀환")은 여기서 나오지 않는다.
+#     대신 P3의 일을 마치면 승무원이 "귀환"을 누른다(마지막 이벤트). 그때 뜨는 귀환 카드를 골라야 돌아간다 — 시스템이 대신 고르지 않는다.
+# 관측·가설·링크의 순서와 간격은 D1과 같다. 화면을 붙여 돌릴 때는 가설과 선택을 사람이 직접 한다(아래 events의 hyp와 choices는 화면 없이 돌릴 때만 쓰인다).
+# 판정(expect)은 없다 — 통과 기준은 로버에 돌아오는 것이다. 검증은 V1·V2가 한다.
+scenario: D2_from_rover
+kind: D
+site: jezero_west_v1
+seed: 17
+nodes: [suit-A]
+start:
+  eva_elapsed_min: 0
+  rover_park: park1
+poi_plan: [P1, P2, P3]
+dwell_min: {P1: 20, P2: 34, P3: 20}
+events:
+  - at: {poi: P2, dwell_min: 4}                     # 1. 예상 밖의 발견
+    type: obs
+    payload: {kind: found, signal: unexpected_mineral, confirmed: false}
+  - at: {after_event: 1, delay_min: 1}              # 2. 가설
+    type: hyp
+    payload: {rule: strata_continuity, extent_m: 300, confidence: 0.5}
+  - at: {after_event: 2, delay_min: 3}              # 3. 연결 끊김
+    type: link
+    payload: {state: LOST, ch: both}
+  - at: {after_event: 3, delay_min: 3}              # 4. 끊긴 채로 관측 (카드가 내려가고 선택지 정지가 된 뒤)
+    type: obs
+    payload: {kind: found, signal: unexpected_mineral, confirmed: false}
+  - at: {after_event: 4, delay_min: 2}              # 5. 다시 이어짐
+    type: link
+    payload: {state: AUTO, ch: both}
+  - at: {poi: P3, dwell_min: 20}                    # 6. P3의 일을 마치고 "귀환"을 누른다
+    type: return
+choices:
+  - {when: {trigger: fork, cause_event: 2}, pick: {from_hypothesis: true}, delay_s: 30}     # 가설에서 나온 옵션을 고른다
+  - {when: {trigger: user_request}, pick: {label_key: return_rover}, delay_s: 30}           # 귀환 카드를 고른다
+  - {when: {trigger: safety}, pick: {label_key: return_rover}}
