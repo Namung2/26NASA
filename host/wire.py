@@ -366,6 +366,8 @@ class Snapshot(M):
     plan: list[Stop]
     route: list[XY]
     return_rover: list[XY]
+    visited: list[Stop] = []         # 다녀온 지점: 계획에 있다가 도착해서 빠진 정지점을 도착한 순서로(로버는 뺀다). 도착 = 그 지점의 도착 반경(menu.arrive_radius_m) 안에 들어옴
+    track: list[XY] = []             # 걸어온 길: 지나온 위치를 오래된 것부터. 기기 프로그램이 받은 위치를 탐색 격자 한 칸 넘게 움직일 때마다 한 점씩 쌓는다
     nlt: NltView | None
     nlt_warn: bool
     gauge: GaugeView | None

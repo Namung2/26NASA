@@ -5,7 +5,7 @@
 import { useState } from "react";
 import { sortOptions } from "../shared/DecisionCards";
 import { GRADE, LABEL, SORT, approx } from "../shared/i18n";
-import { OPTION_COLOR } from "../shared/MapView";
+import { MAP_COLOR } from "../shared/MapView";
 import type { DecisionPoint, Option } from "../types";
 
 type SortKey = DecisionPoint["sort_key"];
@@ -47,7 +47,7 @@ export function ElevationProfile({ o }: { o: Option }) {
   const sz = (z: number) => H - 18 - ((H - 30) * (z - z0)) / (z1 - z0 || 1);
   return (
     <svg className="profile" viewBox={`0 0 ${W} ${H}`}>
-      <polyline fill="none" stroke={OPTION_COLOR[o.id] ?? "#e6e8eb"} strokeWidth="2" points={pts.map((p) => `${sx(p[0]).toFixed(1)},${sz(p[1]).toFixed(1)}`).join(" ")} />
+      <polyline fill="none" stroke={MAP_COLOR.preview} strokeWidth="2" points={pts.map((p) => `${sx(p[0]).toFixed(1)},${sz(p[1]).toFixed(1)}`).join(" ")} />
       <text x={2} y={sz(z1) + 4}>{z1.toFixed(0)} m</text><text x={2} y={sz(z0) + 4}>{z0.toFixed(0)} m</text>
       <text x={pad} y={H - 4}>0</text><text x={W - 6} y={H - 4} textAnchor="end">{x1.toFixed(0)} m · {LABEL[o.label_key]}</text>
     </svg>

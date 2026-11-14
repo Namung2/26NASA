@@ -13,6 +13,9 @@
     예외는 표시용 깃발 둘(pos_warn, tau_warn)과 "정지점에 닿았는가"(계획에서 지난 지점을 빼는 일)다.
   · 선택지 카드는 만들지 않는다 — 로버가 보낸 것을 보인다. 직접 내는 카드는 귀환 카드 하나뿐이다(출발 한계 임박, "귀환" 버튼).
   · 링크가 끊겨도 위치·경로·귀환 경로·출발 한계·입력은 그대로 된다. 끊김이 오래가면 떠 있던 카드만 내린다(선택지 정지).
+  · 다녀온 지점(Snapshot.visited)은 "정지점에 닿았는가"로 계획에서 빠진 정지점을 버리지 않고 모아 둔 것이다(새 판정이 아니다).
+  · 걸어온 길(Snapshot.track)은 받은 위치를 그대로 적어 둔 것이다. 계산이 아니다 — 탐색 격자 한 칸(cfg.grid_m) 넘게 움직였을 때만
+    한 점을 더해 점이 너무 촘촘해지지 않게 할 뿐이다. 프로그램이 다시 뜨면 비워진다(이벤트 로그에 들어가지 않는다).
 """
 from __future__ import annotations
 
@@ -83,6 +86,8 @@ class DeviceNode:
         self._out: list[w.Msg] = []
         self._snap: w.Snapshot | None = None
         self._frame: SensorFrame | None = None
+        self._track: list[tuple[float, float]] = []   # 걸어온 길 (화면 표시용)
+        self._visited: list[w.Stop] = []              # 다녀온 지점 (화면 표시용). 계획에서 빠진 정지점을 그대로 옮겨 담는다
 
     # ── 시작 ──
     def _initial_events(self) -> list:
@@ -132,9 +137,15 @@ class DeviceNode:
             self.science_dirty, self.science_t = False, f.t
             self._refresh_views()
 
+        # 걸어온 길에 지금 위치를 더한다 (마지막으로 적은 점에서 탐색 격자 한 칸 넘게 움직였을 때만)
+        if not self._track or math.dist(f.pos, self._track[-1]) >= self.cfg.grid_m:
+            self._track.append((round(f.pos[0], 1), round(f.pos[1], 1)))
+
         # 계획에서 지난 지점을 뺀다
         while self.plan and math.dist(f.pos, self.plan[0].xy) <= self.arrive_m:
-            self.plan.pop(0)
+            done = self.plan.pop(0)
+            if done.purpose != "rover":             # 로버에 닿은 것은 "다녀온 지점"이 아니라 귀환이다
+                self._visited.append(done)
             self._route_key = None
             # 지점에 닿아 계획이 한 칸 나아갔다 → 떠 있던 로버의 카드는 "닿기 전의 계획"으로 계산한 것이라 낡았다.
             # 그대로 두면 그 카드의 "계획 유지"가 방금 지난 지점을 다시 들르는 계획이 된다(되돌아가게 된다) → 내린다.
@@ -346,7 +357,7 @@ class DeviceNode:
         return w.Snapshot(
             state=state, lmst=f.lmst, sigma_m=f.sigma, pos_warn=pos_warn, traces=self._views["traces"], obs=self._views["obs"],
             channels={"uhf": self._channel(self.link.uhf), "wifi": self._channel(self.link.wifi)},
-            plan=self.plan, route=self._route, return_rover=back, nlt=nlt, nlt_warn=nlt_warn, gauge=self._gauge,
+            plan=self.plan, route=self._route, return_rover=back, track=self._track, visited=self._visited, nlt=nlt, nlt_warn=nlt_warn, gauge=self._gauge,
             dp=self.dp, dp_source=self.dp_source, dp_age_s=round(self.t - self.dp_rx_t, 1) if self.dp else 0.0,
             options_paused=self.options_paused, pending_events=pending, dp_text=tp.dp_text(self.dp) if self.dp else [],
             hyp_draft=self.hyp_draft, hyps=self._views["hyps"], log_count=len(self.table.by_id), log_persisted=False,
