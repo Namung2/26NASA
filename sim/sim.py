@@ -81,6 +81,7 @@ class Sim:
 
         s = scenario.start
         self.t = float(s.eva_elapsed_min) * 60.0
+        self.t0 = self.t                               # 시나리오가 시작한 시각
         if isinstance(s.pos, dict):
             self.pos = self.pois[s.pos["poi"]]
         elif s.pos:
@@ -102,6 +103,9 @@ class Sim:
         self.last_mode = "FULL"
         self.log = SimLog()
         self.home = False
+        # 화면을 붙여 돌릴 때(sim/live.py) 사람에게 넘기는 것. 화면 없이 돌릴 때는 둘 다 기본값(전부 시나리오가 한다)
+        self.auto_choose = True                        # False면 카드를 고르지 않는다 — 사람이 화면에서 고른다
+        self.manual_types: set[str] = set()            # 여기 든 종류의 이벤트(예: "hyp")는 넣지 않고, 사람이 화면에서 넣기를 기다린다
 
         # 승무원이 나가기 전: 로버가 귀환 지도를 계산해 기기에 넘긴다 (Wi-Fi, 한 번)
         self.rover.set_env(rb.env_at(self.t))
@@ -197,7 +201,7 @@ class Sim:
 
     def _choose(self, snap: w.Snapshot) -> None:
         dp = snap.dp
-        if dp is None:
+        if dp is None or not self.auto_choose:
             return
         self.dp_seen_t.setdefault(dp.dp_id, self.t)
         for rule in self.sc.choices:
@@ -226,7 +230,19 @@ class Sim:
         tau = float(self.overrides.get("tau_dust", wx["tau"]))
         dose_rate = self.base_dose * (self.spe_mult if self.spe else 1.0)
         for i, ev in enumerate(self.sc.events, start=1):
-            if i not in self.fired and self._due(i, ev):
+            if i in self.fired:
+                continue
+            if ev.type in self.manual_types:
+                # 사람이 화면에서 넣기를 기다린다. 같은 종류의 이벤트가 로그에 새로 생기면 이 대본 이벤트가 일어난 것으로 친다
+                # (뒤따르는 "after_event" 이벤트들이 그 시각을 기준으로 이어진다)
+                used = set(self.event_ids.values())
+                made = next((e for e in sorted(self.dev.table.by_id.values(), key=lambda e: e.lts)
+                             if e.type == ev.type and e.id not in used and e.approved and e.ts >= self.t0), None)
+                if made is not None:
+                    self.event_ids[i], self.fired[i] = made.id, self.t
+                    self.log.record(self.t, "inject", {"event": i, "type": ev.type, "payload": {"by": "screen"}, "event_id": made.id})
+                continue
+            if self._due(i, ev):
                 self._inject(i, ev)
         self._move(self.dev.snapshot())
         self.dose += dose_rate * self.dt / 3600.0

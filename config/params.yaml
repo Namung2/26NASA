@@ -30,7 +30,8 @@ decision:
   stay_max_min:      {value: 20,   unit: min, status: TUNE, source: "머물기 옵션의 길이"}
   stay_buffer_min:   {value: 2,    unit: min, status: TUNE, source: "머물기 옵션이 남기는 출발 한계 여유"}
   hyp_snap_m:        {value: 50,   unit: m,   status: TUNE, source: "가설 목표를 찾는 반경"}
-  display_precision: {value: {time_min: 1, max_slope_deg: 1, dose_uSv: 0.1, value: 0.1, value_var: 0.01, info_gain: 0.1, nlt_margin_min: 1, comm_loss_min: 1},
+  # time_min 0.1666667 = 10초. 걷는 시간은 "약 N분 M초"로 적는다(2026-11-14 결정). 10초 단위는 제안값이다
+  display_precision: {value: {time_min: 0.1666667, max_slope_deg: 1, dose_uSv: 0.1, value: 0.1, value_var: 0.01, info_gain: 0.1, nlt_margin_min: 1, comm_loss_min: 1},
                       status: DESIGN, source: "S4 §5 — 화면에서 같아 보이는 수치는 계산에서도 같은 값"}
 
 bundle:

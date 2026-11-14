@@ -332,6 +332,8 @@ class HypView(M):
     conf_chosen: Unit01
     conf_now: Unit01
     n_used: int
+    conf_chosen_name: str = ""       # "가능성 낮음" | "반반" | "가능성 높음" — 프로그램이 구간에 대어 붙인 이름. 화면은 그대로 쓴다
+    conf_now_name: str = ""
 
 
 class TraceMark(M):
@@ -349,6 +351,7 @@ class ObsMark(M):
     confirmed: bool
     note: str = ""
     node: NodeId
+    ts: float = 0.0                  # EVA 경과 초
 
 
 class Snapshot(M):
@@ -379,6 +382,7 @@ class Snapshot(M):
     missing_layers: list[str]
     notices: list[str] = []          # 화면 위쪽에 띄울 알림 문장(템플릿이 만든 것)
     tau_warn: bool = False           # 먼지가 경고 임계를 넘었다 — 프로그램이 판정해 싣는다
+    shadow_bin: int = 0              # 지금의 그림자 시간 구간 번호 — 화면이 그림자 타일(shadow_<n>)을 고르는 데 쓴다
 
 
 class CrewStatus(M):
@@ -407,6 +411,8 @@ class ConsoleSnapshot(M):
     traces: list[TraceMark] = []
     missing_layers: list[str]
     link_up: bool = True
+    shadow_bin: int = 0
+    hyp_draft: HypDraft | None = None    # 콘솔의 가설 양식에서 고른 것(확인 창에 되읽기 문장과 함께 뜬다)
 
 
 class CmdChoose(M):
@@ -464,6 +470,13 @@ class ScreenCmd(M):
     """화면 → 프로그램. 화면은 응답을 기다리지 않는다 — 결과는 다음 스냅샷에 나타난다."""
     type: Literal["command"] = "command"
     cmd: Command
+
+
+class ConsoleCmd(M):
+    """로버 콘솔 → 로버 프로그램. 로버에 탄 사람이 메모를 읽고 가설을 넣는다(R-29). 기준점은 고른 관측(anchor_event)의 위치다."""
+    type: Literal["console_command"] = "console_command"
+    cmd: Annotated[CmdHyp | CmdHypReply, Field(discriminator="kind")]
+    anchor_event: str | None = None  # 가설의 기준이 되는 관측 이벤트의 id. hyp 명령에는 꼭 있어야 한다
 
 
 # ── §8 정규 JSON ──────────────────────────────────────────────────────────

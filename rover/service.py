@@ -25,6 +25,7 @@ from host import btcore as bt
 from host import bundle as hb
 from host import config as hc
 from host import convert as cv
+from host import templates as tp
 from host import wire as w
 
 
@@ -41,6 +42,8 @@ class RoverService:
         self.path_max_pts = int(_v(p["link"]["path_max_pts"]))
         self.arrive_m = float(_v(p["menu"]["arrive_radius_m"]))
         self.trace_max = int(_v(p["menu"]["trace_snapshot_max"]))
+        self.extent_levels = list(_v(p["menu"]["extent_levels_m"]))
+        self.conf_levels = list(_v(p["menu"]["confidence_levels"]))
         self.cfg = hc.load_config(tiers_path, params_path, "rover", bundle.meta)
         self.core = bt.Core.create(self.cfg)
         bundle.attach(self.core, park_id)
@@ -70,6 +73,10 @@ class RoverService:
         self._route_key = None
         self._views = {"hyps": [], "traces": [], "obs": []}
         self._env: bt.BtEnv | None = None
+        self.hyp_draft: w.HypDraft | None = None    # 콘솔의 가설 양식에서 고른 것 (확인 창에 뜬다)
+        self._draft_anchor: str | None = None
+        self.n_hyp = 0
+        self._queued: list[w.Msg] = []              # 기기의 메시지 없이 생긴 보낼 것(콘솔에서 넣은 가설의 카드). 다음 하트비트의 답에 실린다
 
     def _initial_events(self) -> list:
         import json
@@ -109,6 +116,9 @@ class RoverService:
             out.append(w.HbAck(ch=msg.ch, seq=msg.seq, node="rover", t_send=msg.t_send, ack_seq=msg.seq))
             if msg.ch == "uhf" and gap > 5.0:
                 self._resend = True                 # 끊겼다 다시 이어졌다 → 새 상태(텔레메트리)가 오면 열린 결정 지점을 다시 보낸다
+            if msg.ch == "uhf" and self._queued:
+                out += self._queued
+                self._queued = []
         elif msg.type == "telemetry":
             self.crew = msg.state
             self._track_visits()
@@ -149,6 +159,29 @@ class RoverService:
         self.core.science_update(self.t)
         self._views = science_views(self.core, self.table, self.trace_max)
         return self._check_triggers(fresh, prev_plan)
+
+    # ── 콘솔에서 온 조작 (R-29: 로버에 탄 사람이 밖에서 온 메모를 읽고 가설을 넣는다) ──
+    def on_command(self, c: w.ConsoleCmd) -> None:
+        cmd = c.cmd
+        if cmd.kind == "hyp":
+            if c.anchor_event is None or c.anchor_event not in self.table.by_id:
+                return                              # 기준이 되는 관측을 고르지 않았으면 받지 않는다 — 시스템은 빈칸을 채우지 않는다
+            d = w.HypDraft(rule=cmd.rule, direction_idx=cmd.direction_idx, extent_idx=cmd.extent_idx, confidence_idx=cmd.confidence_idx)
+            self.hyp_draft = d.model_copy(update={"readback": tp.hyp_readback(d, self.extent_levels)})
+            self._draft_anchor = c.anchor_event
+        elif cmd.kind == "hyp_reply":
+            d, anchor = self.hyp_draft, self._draft_anchor
+            if d is None or cmd.reply == "edit":
+                return                              # 수정: 고른 값을 그대로 둔 채 양식으로 돌아간다
+            self.hyp_draft = self._draft_anchor = None
+            if cmd.reply != "approve" or anchor is None:
+                return                              # 거절 → 이벤트 없음
+            self.n_hyp += 1
+            at = self.table.by_id[anchor].geom.xy
+            ev = cv.append_event(self.core, self.table, self.node, "hyp", at, self.t, w.HypPayload(
+                hyp_id=f"{self.node}:h-{self.n_hyp:03d}", rule=d.rule, direction_deg=45.0 * d.direction_idx,
+                extent_m=self.extent_levels[d.extent_idx], confidence=self.conf_levels[d.confidence_idx], origin="menu", anchor_event=anchor))
+            self._queued += self._on_new_events([ev])   # 지도가 바뀌었다 → 선택지를 다시 계산. 이벤트 자체는 다음 동기화 때 기기로 내려간다
 
     def _plan_before(self, hyp_id: str) -> list[w.Stop] | None:
         """그 가설이 기여한 선택 직전의 계획에서, 그 뒤에 이미 들른 지점을 뺀 것. 그런 선택이 없으면 None."""
@@ -253,4 +286,5 @@ class RoverService:
         crew = w.CrewStatus(node=self.crew_node, state=self.crew, last_rx_s=round(t - self.last_rx_t, 1), nlt=nlt, plan=self.plan, route=self._route)
         return w.ConsoleSnapshot(t=t, lmst=lmst, rover_pos=self.park_xy, candidates=self.candidates, shown_ids=shown, crew=crew, alerts=alerts,
                                  recent_decisions=self.recent_dps, recent_events=self.table.ordered()[-20:], hyps=self._views["hyps"],
-                                 obs=self._views["obs"], traces=self._views["traces"], missing_layers=self.meta.get("missing_layers", []), link_up=link_up)
+                                 obs=self._views["obs"], traces=self._views["traces"], missing_layers=self.meta.get("missing_layers", []), link_up=link_up,
+                                 shadow_bin=max(0, self.env_bin), hyp_draft=self.hyp_draft)

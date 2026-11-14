@@ -121,6 +121,9 @@ struct bt_ctx {
 
   bt::Science sci;
   bt::Decide dec;
+
+  bt_cell* ret;        // 귀환 경로를 따라가 볼 때 쓰는 작업 버퍼 (return_seconds). 결과로 남기지 않는다
+  uint32_t ret_cap;
 };
 
 namespace bt {
@@ -149,6 +152,12 @@ bt_status alternatives_ex(bt_ctx* c, bt_xy start, bt_xy goal, const bt_budget* b
 bool cell_info(const bt_ctx* c, double res_m, bt_cell a, float* elev, float* slope, uint8_t* los, bt_xy* xy);
 double step_seconds(const bt_ctx* c, float e_from, float e_to, double dist_m, int mode);
 bool cells_cost(const bt_ctx* c, const bt_cell* cells, uint32_t len, int profile, double* cost, double* length);
+// 칸 경로를 "곧게 편 선"으로 걸을 때의 시간(초)·길이(m)·로버와 링크가 안 되는 시간(초). 화면에 그리는 선과 같은 선이다.
+// pins: 꼭 지나야 하는 칸의 번호(오름차순 — 들르는 정지점). 그 칸을 건너뛰어 곧게 펴지 않는다. 없으면 nullptr, 0.
+uint32_t straight_reach(const bt_ctx* c, const bt_cell* cells, uint32_t len, double res_m, uint32_t anchor, uint32_t limit);
+double straight_seconds(const bt_ctx* c, bt_xy a, bt_xy b, double res_m, int mode, double* length, double* lost);
+bool straight_measure(const bt_ctx* c, const bt_cell* cells, uint32_t len, double res_m, int mode,
+                      const uint32_t* pins, uint32_t n_pins, double* sec, double* length, double* lost);
 
 // safety.cpp
 bool return_seconds(const bt_ctx* c, const FieldView& v, bt_xy pos, double* sec, uint8_t* degraded);

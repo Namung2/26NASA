@@ -93,7 +93,8 @@ enum { BT_TRIG_FORK = 0, BT_TRIG_ENV = 1, BT_TRIG_LINK_LOST = 2, BT_TRIG_SAFETY 
 enum { BT_CAUSE_ROUTE = 0, BT_CAUSE_OBS = 1, BT_CAUSE_HYP = 2, BT_CAUSE_OTHER = 3,
        BT_CAUSE_SPE = 4, BT_CAUSE_NLT = 5, BT_CAUSE_SUNSET = 6, BT_CAUSE_RETURN = 7,
        BT_CAUSE_DUST = 8, BT_CAUSE_SHADOW = 9, BT_CAUSE_LINK = 10 };
-enum { BT_NOTICE_HYP_UNREACHABLE = 1, BT_NOTICE_NO_FEASIBLE_RETURN = 2 };                    /* bt_decision.notices 비트 */
+enum { BT_NOTICE_HYP_UNREACHABLE = 1, BT_NOTICE_NO_FEASIBLE_RETURN = 2,
+       BT_NOTICE_HYP_NO_EFFECT = 4 };   /* bt_decision.notices 비트. NO_EFFECT: 가설이 그 방향의 지도 값을 올리지 않아 갈 목표가 없다 */
 
 enum { BT_DT_F32 = 0, BT_DT_U16 = 1, BT_DT_U8 = 2, BT_DT_BITS = 3 };                         /* bt_raster.dtype */
 typedef enum { BT_LAYER_SLOPE = 0, BT_LAYER_ELEV = 1, BT_LAYER_ROUGHNESS = 2, BT_LAYER_SHADOW = 3,
@@ -343,7 +344,9 @@ BT_API bt_status bt_path_measure(bt_ctx*, const bt_path*, const bt_state*, bt_wa
 BT_API bt_status bt_alternatives(bt_ctx*, bt_xy start, bt_xy goal, const bt_budget*, bt_path* out, uint32_t cap, uint32_t* n);
 /* 경로의 꺾이는 점만 낸다(칸 중심의 좌표, 시작·끝 포함). 격자 경로는 8방향이라 계단 모양인데, 사이를 직선으로 이어도
  * 통과 가능한 곳만 지나는 구간은 선 하나로 줄인다. 화면에 그릴 때와 UHF로 보낼 때(점 수를 줄여야 한다) 쓴다.
- * 걷는 시간·길이 같은 수치는 여전히 칸 경로로 잰다(bt_path_measure) — 직선보다 몇 % 길게 잡히는 쪽이라 안전한 쪽이다. */
+ * 걷는 시간·길이·링크가 안 되는 시간도 이 선으로 잰다(bt_path_measure, bt_depart_limit, 옵션의 시간과 귀환 시간) — 그린 길과 잰 길이 같다.
+ * 계단 길을 따라 재면 직선보다 최대 약 8 % 길게 나온다(REFERENCE §4.5). 귀환 지도에 적힌 값(bt_field_copy, bt_return_path의 cost)만
+ * 계단 길의 시간 그대로이고, 귀환 경로를 적지 못했을 때의 대신 값으로만 쓴다(긴 쪽이라 안전하다). */
 BT_API bt_status bt_path_polyline(const bt_ctx*, const bt_path*, bt_xy* out, uint32_t cap, uint32_t* n);
 /* 들를 지점과 순서를 고른다: start에서 출발해 고른 지점을 차례로 들르고 end에 닿는 걷는 시간 + 체류 시간이
  * budget->time_s 안에 드는 것 가운데 과학 가치의 합이 가장 큰 것. 값이 같으면 시간이 짧은 쪽, 그것도 같으면 번호가 앞선 쪽.

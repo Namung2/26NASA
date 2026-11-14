@@ -659,25 +659,119 @@ bool straight_ok(const bt_ctx* c, double res_m, bt_xy a, bt_xy b) {
   return true;
 }
 
+// 좌표의 고도: 바탕 고도 레이어의 칸 중심 네 개 사이를 두 방향으로 보간한다. 값이 없는 칸이 끼면 가장 가까운 칸의 값
+bool elev_at(const bt_ctx* c, bt_xy p, double* out) {
+  if (!c->layer_set[BT_LAYER_ELEV]) { *out = 0.0; return true; }
+  const bt_grid_geom& bg = c->cfg.cost_grid;
+  const double res = static_cast<double>(bg.res_m);
+  const double fc = (p.x - bg.origin.x) / res - 0.5, fr = (bg.origin.y - p.y) / res - 0.5;
+  int32_t c0 = static_cast<int32_t>(std::floor(fc)), r0 = static_cast<int32_t>(std::floor(fr));
+  const int32_t wmax = static_cast<int32_t>(bg.w) - 1, hmax = static_cast<int32_t>(bg.h) - 1;
+  if (c0 < 0) c0 = 0;
+  if (r0 < 0) r0 = 0;
+  if (c0 > wmax - 1) c0 = wmax > 0 ? wmax - 1 : 0;
+  if (r0 > hmax - 1) r0 = hmax > 0 ? hmax - 1 : 0;
+  const int32_t c1 = c0 < wmax ? c0 + 1 : c0, r1 = r0 < hmax ? r0 + 1 : r0;
+  double a = fc - c0, b = fr - r0;
+  if (a < 0) a = 0;
+  if (a > 1) a = 1;
+  if (b < 0) b = 0;
+  if (b > 1) b = 1;
+  const bt_raster& E = c->layer[BT_LAYER_ELEV];
+  const float e00 = raster_f(E, static_cast<uint64_t>(r0) * bg.w + static_cast<uint64_t>(c0));
+  const float e01 = raster_f(E, static_cast<uint64_t>(r0) * bg.w + static_cast<uint64_t>(c1));
+  const float e10 = raster_f(E, static_cast<uint64_t>(r1) * bg.w + static_cast<uint64_t>(c0));
+  const float e11 = raster_f(E, static_cast<uint64_t>(r1) * bg.w + static_cast<uint64_t>(c1));
+  if (e00 == e00 && e01 == e01 && e10 == e10 && e11 == e11) {
+    *out = (static_cast<double>(e00) * (1 - a) + static_cast<double>(e01) * a) * (1 - b) +
+           (static_cast<double>(e10) * (1 - a) + static_cast<double>(e11) * a) * b;
+    return true;
+  }
+  const float en = (a < 0.5 ? (b < 0.5 ? e00 : e10) : (b < 0.5 ? e01 : e11));
+  if (!(en == en)) return false;
+  *out = static_cast<double>(en);
+  return true;
+}
+
+inline bool los_at(const bt_ctx* c, bt_xy p) {
+  if (!c->layer_set[BT_LAYER_LOS]) return true;
+  int32_t r, col;
+  if (!xy_to_cell(geom_of(c->cfg.cost_grid), p, &r, &col)) return true;
+  return raster_bit(c->layer[BT_LAYER_LOS], 0, static_cast<uint64_t>(r) * c->cfg.cost_grid.w + static_cast<uint64_t>(col)) != 0;
+}
+
 }  // namespace
+
+namespace bt {
+
+// anchor 칸에서 직선으로 닿는 가장 먼 칸의 번호(limit 이하). 바로 다음 칸은 언제나 닿는다(경로의 일부).
+// 화면에 그리는 선(bt_path_polyline)과 시간을 재는 선(straight_measure)이 이 함수 하나를 같이 쓴다 — 그린 길과 잰 길이 같다
+uint32_t straight_reach(const bt_ctx* c, const bt_cell* cells, uint32_t len, double res_m, uint32_t anchor, uint32_t limit) {
+  constexpr uint32_t LOOK = 512;                                 // 한 번에 건너뛰어 보는 칸 수의 상한
+  const Geom pg{c->cfg.cost_grid.origin.x, c->cfg.cost_grid.origin.y, res_m, 0, 0};
+  const bt_xy a = cell_center(pg, cells[anchor].row, cells[anchor].col);
+  uint32_t stop = anchor + LOOK < len - 1 ? anchor + LOOK : len - 1;
+  if (stop > limit) stop = limit;
+  uint32_t reach = anchor + 1;
+  for (uint32_t j = anchor + 2; j <= stop; ++j) {
+    if (!straight_ok(c, res_m, a, cell_center(pg, cells[j].row, cells[j].col))) break;
+    reach = j;
+  }
+  return reach;
+}
+
+// a에서 b까지 직선으로 걷는 시간(초). 한 칸 길이쯤마다 고도를 읽어 그 구간의 경사로 속도를 낸다
+double straight_seconds(const bt_ctx* c, bt_xy a, bt_xy b, double res_m, int mode, double* length, double* lost) {
+  const double dx = b.x - a.x, dy = b.y - a.y, len = std::sqrt(dx * dx + dy * dy);
+  if (len < 1e-9) return 0.0;
+  const uint32_t n = static_cast<uint32_t>(std::ceil(len / res_m));
+  const double ds = len / n;
+  double sec = 0.0, e_prev = 0.0;
+  bool have_prev = elev_at(c, a, &e_prev);
+  for (uint32_t k = 1; k <= n; ++k) {                            // 상한: 구간 길이 / 칸 크기
+    const double t = static_cast<double>(k) / n;
+    const bt_xy q{a.x + dx * t, a.y + dy * t};
+    double e = 0.0;
+    const bool have = elev_at(c, q, &e);
+    const double step = (have && have_prev) ? step_seconds(c, static_cast<float>(e_prev), static_cast<float>(e), ds, mode)
+                                            : step_seconds(c, 0.0f, 0.0f, ds, mode);   // 고도를 모르는 구간은 평지로 본다
+    sec += step;
+    if (lost && !los_at(c, q)) *lost += step;
+    e_prev = e; have_prev = have;
+  }
+  if (length) *length += len;
+  return sec;
+}
+
+bool straight_measure(const bt_ctx* c, const bt_cell* cells, uint32_t len, double res_m, int mode,
+                      const uint32_t* pins, uint32_t n_pins, double* sec, double* length, double* lost) {
+  *sec = 0.0; *length = 0.0; *lost = 0.0;
+  if (!cells || len == 0 || !(res_m > 0)) return false;
+  const Geom pg{c->cfg.cost_grid.origin.x, c->cfg.cost_grid.origin.y, res_m, 0, 0};
+  uint32_t anchor = 0, pin = 0;
+  while (anchor + 1 < len) {                                     // 상한: 경로의 칸 수
+    while (pin < n_pins && pins[pin] <= anchor) pin += 1;        // 다음에 꼭 지나야 하는 칸
+    const uint32_t limit = pin < n_pins ? pins[pin] : len - 1;
+    const uint32_t reach = straight_reach(c, cells, len, res_m, anchor, limit);
+    *sec += straight_seconds(c, cell_center(pg, cells[anchor].row, cells[anchor].col), cell_center(pg, cells[reach].row, cells[reach].col),
+                             res_m, mode, length, lost);
+    anchor = reach;
+  }
+  return true;
+}
+
+}  // namespace bt
 
 bt_status bt_path_polyline(const bt_ctx* c, const bt_path* path, bt_xy* out, uint32_t cap, uint32_t* n) {
   if (!c || !path || !path->cells || !out || !n || path->len == 0 || !(path->res_m > 0)) return BT_ERR_ARG;
   if (!c->layer_set[BT_LAYER_SLOPE]) return BT_ERR_NOT_READY;
   const Geom pg{c->cfg.cost_grid.origin.x, c->cfg.cost_grid.origin.y, path->res_m, 0, 0};
-  constexpr uint32_t LOOK = 512;                                 // 한 번에 건너뛰어 보는 칸 수의 상한
   uint32_t count = 0, anchor = 0;
   *n = 0;
   if (cap == 0) return BT_ERR_CAPACITY;
   out[count++] = cell_center(pg, path->cells[0].row, path->cells[0].col);
   while (anchor + 1 < path->len) {                               // 상한: 경로의 칸 수
-    const bt_xy a = cell_center(pg, path->cells[anchor].row, path->cells[anchor].col);
-    uint32_t reach = anchor + 1;                                 // 바로 다음 칸은 언제나 갈 수 있다(경로의 일부)
-    const uint32_t stop = anchor + LOOK < path->len - 1 ? anchor + LOOK : path->len - 1;
-    for (uint32_t j = anchor + 2; j <= stop; ++j) {              // 직선으로 닿는 가장 먼 칸
-      if (!straight_ok(c, path->res_m, a, cell_center(pg, path->cells[j].row, path->cells[j].col))) break;
-      reach = j;
-    }
+    const uint32_t reach = straight_reach(c, path->cells, path->len, path->res_m, anchor, path->len - 1);
     if (count >= cap) return BT_ERR_CAPACITY;
     out[count++] = cell_center(pg, path->cells[reach].row, path->cells[reach].col);
     anchor = reach;
@@ -743,12 +837,14 @@ bt_status bt_return_path(bt_ctx* c, bt_field_id id, bt_xy start, bt_path* out) {
   return BT_OK;
 }
 
+// 경로의 수치. 시간·길이·링크가 안 되는 시간은 "곧게 편 선"으로 잰다(화면에 그리는 선과 같은 선 — bt_path_polyline).
+// 격자 경로는 8방향이라 계단 모양이고, 계단을 따라 재면 실제로 걷는 직선보다 최대 약 8 % 길게 나온다(REFERENCE §4.5).
+// 최대 경사는 경로가 지나는 칸의 값 그대로다(곧게 펴도 같은 칸들 사이를 지난다).
 bt_status bt_path_measure(bt_ctx* c, const bt_path* path, const bt_state* state, bt_walk_mode mode, bt_path_metrics* out) {
   (void)state;
   if (!c || !path || !out || !path->cells || path->len == 0 || !(path->res_m > 0)) return BT_ERR_ARG;
   if (!c->layer_set[BT_LAYER_SLOPE]) return BT_ERR_NOT_READY;
-  double sec = 0.0, length = 0.0, lost = 0.0;
-  float smax = 0.0f, e_prev = 0.0f;
+  float smax = 0.0f;
   for (uint32_t k = 0; k < path->len; ++k) {
     const bt_cell a = path->cells[k];
     float e, sl; uint8_t los; bt_xy p;
@@ -758,14 +854,10 @@ bt_status bt_path_measure(bt_ctx* c, const bt_path* path, const bt_state* state,
       const bt_cell q = path->cells[k - 1];
       const int32_t dr = a.row - q.row, dc = a.col - q.col;
       if (dr < -1 || dr > 1 || dc < -1 || dc > 1 || (dr == 0 && dc == 0)) return BT_ERR_ARG;
-      const double dist = ((dr != 0 && dc != 0) ? SQRT2 : 1.0) * path->res_m;
-      const double step = step_seconds(c, e_prev, e, dist, static_cast<int>(mode));
-      sec += step;
-      length += dist;
-      if (!los) lost += step;                       // 로버 가시선 밖 구간
     }
-    e_prev = e;
   }
+  double sec = 0.0, length = 0.0, lost = 0.0;
+  straight_measure(c, path->cells, path->len, path->res_m, static_cast<int>(mode), nullptr, 0, &sec, &length, &lost);
   out->time_min = static_cast<float>(sec / 60.0);
   out->max_slope_deg = smax;
   out->dose_uSv = c->env_set ? static_cast<float>(c->env.dose_rate_uSv_h * sec / 3600.0) : 0.0f;

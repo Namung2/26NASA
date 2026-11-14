@@ -7,12 +7,12 @@ __pycache__/
 .ruff_cache/
 node_modules/
 screen/dist/
-
+.claude/
 # 내려받은 자료와 만든 번들 (크다. 받는 곳은 docs/REFERENCE_BingoTime.md §1.2)
 자료/
 data/raw/
 data/bundles/
-
+*.zip
 # 개인 작업 흔적
 .backup_*/
 docs.zip

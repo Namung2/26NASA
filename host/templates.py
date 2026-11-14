@@ -34,6 +34,7 @@ CAUSE = {"dust": "먼지가 경고 임계를 넘었습니다.", "shadow": "그�
          "nlt": "출발 한계에 닿았습니다. 로버로 돌아갈 시간입니다.", "spe": "태양 입자 경보입니다. 로버로 대피합니다."}
 NOTICE = {
     "hyp_unreachable_within_nlt": "가설 목표는 출발 한계 안에 다녀올 수 없어 선택지에 없습니다.",
+    "hyp_no_effect": "가설이 그 방향의 지도 값을 올리지 않아 가설 목표가 없습니다.",
     "no_feasible_return": "로버까지 가는 길을 찾지 못했습니다.",
     "bundle_mismatch": "기기와 로버의 지도 묶음이 다릅니다.",
     "options_paused": "선택지 정지 — 로버와 연결이 끊겨 새 선택지를 받지 못합니다.",
@@ -42,6 +43,20 @@ NOTICE = {
     "pos_warn": "위치 오차가 큽니다.",
     "late": "출발 한계를 이미 넘겼습니다.",
 }
+
+
+def approx_time(minutes: float) -> str:
+    """걷는 시간의 표기: "약 N분 M초". 시간은 어림값이라 늘 '약'을 붙인다(2026-11-14 결정).
+
+    코어가 10초 단위로 맞춰 준 값(config/params.yaml display_precision.time_min)을 분·초로 나눠 적을 뿐, 다시 계산하지 않는다.
+    """
+    m, sec = divmod(round(minutes * 60.0), 60)
+    return f"약 {m}분 {sec}초" if sec else f"약 {m}분"
+
+
+def confidence_name(p: float) -> str:
+    """확신(0~1) → 메뉴의 세 이름. 구간은 0~33 % / 33~66 % / 66~100 % (S3c §7, IPCC 가능성 척도)."""
+    return CONFIDENCE[0 if p < 1.0 / 3.0 else (1 if p < 2.0 / 3.0 else 2)]
 
 
 def render_dp_header(dp: w.DecisionPoint) -> str:
@@ -58,7 +73,7 @@ def render_option(o: w.Option) -> str:
     else:
         value = f"{GRADE[o.value_grade]} ({o.value_mean:.1f})"
     late = f" 한계를 {-o.nlt_margin_min:.0f}분 넘김." if o.late else f" 출발까지 {o.nlt_margin_min:.0f}분."
-    return (f"{o.id} {LABEL.get(o.label_key, o.label_key)}: {o.time_min:.0f}분, 최대 경사 {o.max_slope_deg:.0f}°, 선량 {o.dose_uSv:.1f} µSv, "
+    return (f"{o.id} {LABEL.get(o.label_key, o.label_key)}: {approx_time(o.time_min)}, 최대 경사 {o.max_slope_deg:.0f}°, 선량 {o.dose_uSv:.1f} µSv, "
             f"과학 가치 {value}, 정보 이득 {o.info_gain:.1f}, 통신 두절 {o.comm_loss_min:.0f}분.{late}")
 
 

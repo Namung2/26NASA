@@ -232,9 +232,11 @@ static void test_field() {
   CHECK(ft[40 * 64 + 58] == 0.0f && fn[40 * 64 + 58] == BT_DIR_NONE);
   CHECK(std::isinf(ft[55 * 64 + 55]));                                   // 갇힌 방에서는 못 돌아온다
 
-  // 귀환 경로의 걷는 시간 합 = 필드 값 (V-1)
+  // 귀환 경로 (V-1): 지도에 적힌 값은 8방향 계단 길의 시간이고(경로의 cost로 그대로 나온다), 재는 시간은 그 길을 곧게 편 선의 시간이다.
+  // 곧게 편 선은 계단 길보다 길 수 없다(삼각 부등식). 시간은 계단 길의 값과 8방향 격자의 기하학적 한도(1/cos 22.5° ≈ 1.082) 안에서 맞아야 한다
   std::vector<bt_cell> buf(4096); bt_path p; std::memset(&p, 0, sizeof(p)); p.cells = buf.data(); p.cap = 4096;
   uint32_t seed = 17; int tried = 0;
+  double ratio_lo = 1e9, ratio_hi = 0.0;
   for (int it = 0; it < 200; ++it) {
     seed = seed * 1664525u + 1013904223u; const int r = (seed >> 8) % 64, c = (seed >> 16) % 64;
     if (!std::isfinite(ft[r * 64 + c])) { CHECK(bt_return_path(k.ctx, BT_FIELD_ROVER_RETURN, cxy(5, r, c), &p) == BT_ERR_UNREACHABLE); continue; }
@@ -242,10 +244,15 @@ static void test_field() {
     CHECK(p.cells[p.len - 1].row == 40 && p.cells[p.len - 1].col == 58 && violations(m, p) == 0);
     bt_path_metrics pm;
     CHECK(bt_path_measure(k.ctx, &p, &st, BT_WALK_RETURN, &pm) == BT_OK);
-    NEAR(pm.time_min * 60.0, ft[r * 64 + c], 1e-4 * (1.0 + ft[r * 64 + c]));
+    CHECK(p.cost == static_cast<double>(ft[r * 64 + c]));
+    CHECK(pm.length_m <= p.length_m * (1.0 + 1e-6) + 1e-3);
+    ratio_lo = std::min(ratio_lo, pm.time_min * 60.0 / std::max(1e-9, static_cast<double>(ft[r * 64 + c])));
+    ratio_hi = std::max(ratio_hi, pm.time_min * 60.0 / std::max(1e-9, static_cast<double>(ft[r * 64 + c])));
+    if (ft[r * 64 + c] > 0) CHECK(pm.time_min * 60.0 <= ft[r * 64 + c] * 1.02 + 1.0 && pm.time_min * 60.0 >= ft[r * 64 + c] / 1.0824 * 0.97 - 1.0);
     tried++;
   }
   CHECK(tried > 100);
+  std::printf("  귀환: 곧게 편 선의 시간 / 지도에 적힌 시간 = %.3f ~ %.3f\n", ratio_lo, ratio_hi);
 
   // 같은 필드를 다른 인스턴스(기기 쪽)에 넘겨도 같은 출발 한계가 나온다
   Core dev; CHECK(setup(dev, m, 5.0f));
@@ -254,7 +261,12 @@ static void test_field() {
   bt_nlt a, b2;
   CHECK(bt_depart_limit(k.ctx, &st, &a) == BT_OK && bt_depart_limit(dev.ctx, &st, &b2) == BT_OK);
   CHECK(a.t_depart == b2.t_depart && a.slack_min == b2.slack_min && a.binding == BT_BIND_EVA_MAX && a.degraded == 0);
-  NEAR(a.t_depart, 8 * 3600.0 - ft[10 * 64 + 5], 1e-6);
+  {                                                                      // 출발 한계 = 마감 − (지금 자리에서 곧게 편 귀환 경로를 걷는 시간)
+    bt_path_metrics pm0;
+    CHECK(bt_return_path(k.ctx, BT_FIELD_ROVER_RETURN, st.pos, &p) == BT_OK && bt_path_measure(k.ctx, &p, &st, BT_WALK_RETURN, &pm0) == BT_OK);
+    NEAR(a.t_depart, 8 * 3600.0 - pm0.time_min * 60.0, 0.05);
+    CHECK(a.t_depart >= 8 * 3600.0 - ft[10 * 64 + 5] - 1e-6);              // 지도에 적힌(계단 길) 시간보다 늦게 떠나도 된다
+  }
   st.pos = cxy(5, 55, 55);                                               // 필드가 닿지 않는 자리 → 가까운 칸 값 + 걷는 시간
   CHECK(bt_depart_limit(k.ctx, &st, &a) == BT_OK && a.degraded == 1);
 

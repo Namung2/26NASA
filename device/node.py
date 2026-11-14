@@ -345,7 +345,7 @@ class DeviceNode:
             dp=self.dp, dp_source=self.dp_source, dp_age_s=round(self.t - self.dp_rx_t, 1) if self.dp else 0.0,
             options_paused=self.options_paused, pending_events=pending, dp_text=tp.dp_text(self.dp) if self.dp else [],
             hyp_draft=self.hyp_draft, hyps=self._views["hyps"], log_count=len(self.table.by_id), log_persisted=False,
-            missing_layers=self.meta.get("missing_layers", []), notices=notices, tau_warn=tau_warn)
+            missing_layers=self.meta.get("missing_layers", []), notices=notices, tau_warn=tau_warn, shadow_bin=int(f.shadow_bin))
 
 
 def science_views(core: bt.Core, table: cv.EventTable, trace_max: int) -> dict:
@@ -358,9 +358,10 @@ def science_views(core: bt.Core, table: cv.EventTable, trace_max: int) -> dict:
         if ev is None:
             continue
         hyps.append(w.HypView(hyp_id=ev.payload.hyp_id, rule=ev.payload.rule, xy=ev.geom.xy, direction_deg=ev.payload.direction_deg,
-                              extent_m=ev.payload.extent_m, conf_chosen=round(h["conf_chosen"], 3), conf_now=round(min(1.0, max(0.0, h["conf_now"])), 3), n_used=h["n_used"]))
+                              extent_m=ev.payload.extent_m, conf_chosen=round(h["conf_chosen"], 3), conf_now=round(min(1.0, max(0.0, h["conf_now"])), 3), n_used=h["n_used"],
+                              conf_chosen_name=tp.confidence_name(h["conf_chosen"]), conf_now_name=tp.confidence_name(h["conf_now"])))
     traces = [w.TraceMark(xy=(round(t["xy"][0], 1), round(t["xy"][1], 1)), kind="photo" if t["kind"] == bt.TRACE_PHOTO else "mention",
                           fade=round(min(1.0, max(0.0, t["fade"])), 2), kept=t["kept"]) for t in view["traces"] if t["alive"]][-trace_max:]
-    obs = [w.ObsMark(id=e.id, xy=e.geom.xy, found=e.payload.kind == "found", confirmed=e.payload.confirmed, note=e.payload.note, node=e.node)
+    obs = [w.ObsMark(id=e.id, xy=e.geom.xy, found=e.payload.kind == "found", confirmed=e.payload.confirmed, note=e.payload.note, node=e.node, ts=round(e.ts, 1))
            for e in table.ordered() if e.type == "obs"]
     return {"hyps": hyps, "traces": traces, "obs": obs}

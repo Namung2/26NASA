@@ -19,7 +19,29 @@ bool return_seconds(const bt_ctx* c, const FieldView& v, bt_xy pos, double* sec,
   *degraded = 0;
   if (!xy_to_cell(v.geom, pos, &r, &col)) return false;
   const float t0 = v.time[static_cast<uint64_t>(r) * v.geom.w + static_cast<uint64_t>(col)];
-  if (t0 < F_INF) { *sec = static_cast<double>(t0); return true; }
+  if (t0 < F_INF) {
+    // 귀환 지도의 방향을 따라 로버까지 가는 칸들을 적고, 그 길을 곧게 편 선으로 걷는 시간을 잰다.
+    // 지도에 적힌 시간(t0)은 8방향 계단 길의 시간이라 직선으로 걷는 것보다 길다 — 길을 못 적었을 때만 그 값을 쓴다(긴 쪽이라 안전하다)
+    uint32_t n = 0;
+    int32_t rr = r, cc = col;
+    bool ok = c->ret != nullptr;
+    while (ok) {                                    // 상한: 작업 버퍼의 크기
+      if (n >= c->ret_cap) { ok = false; break; }
+      c->ret[n].row = rr; c->ret[n].col = cc;
+      n += 1;
+      const uint8_t d = v.next[static_cast<uint64_t>(rr) * v.geom.w + static_cast<uint64_t>(cc)];
+      if (d >= 8) break;
+      rr += DR[d]; cc += DC[d];
+      if (rr < 0 || cc < 0 || rr >= static_cast<int32_t>(v.geom.h) || cc >= static_cast<int32_t>(v.geom.w)) { ok = false; break; }
+    }
+    double s = 0.0, len = 0.0, lost = 0.0;
+    if (ok && c->layer_set[BT_LAYER_SLOPE] && straight_measure(c, c->ret, n, v.geom.res, BT_WALK_RETURN, nullptr, 0, &s, &len, &lost)) {
+      *sec = s;
+      return true;
+    }
+    *sec = static_cast<double>(t0);
+    return true;
+  }
   const int32_t maxk = static_cast<int32_t>(v.geom.h > v.geom.w ? v.geom.h : v.geom.w);
   const double v_ret = static_cast<double>(c->cfg.v_return_kmh) / 3.6;
   double best = D_INF;

@@ -147,6 +147,8 @@ bt_ctx* layout(Arena& a, const bt_config* cfg, const Sizes& z) {
   x->dec.pool = a.take<bt_cell>(z.path_cells * BT_MAX_CANDIDATES);
   x->dec.alt_per = static_cast<uint32_t>(z.path_cells);
   x->dec.alt = a.take<bt_cell>(z.path_cells * BT_MAX_PROFILES);
+  x->ret_cap = static_cast<uint32_t>(z.path_cells);
+  x->ret = a.take<bt_cell>(z.path_cells);
   if (cfg->replan_radius_m > 0) {
     const uint64_t n = z.search_cells;
     x->s.cap = static_cast<uint32_t>(n);

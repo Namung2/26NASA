@@ -79,6 +79,36 @@ bool build_route(bt_ctx* c, bt_xy start, const bt_stop* stops, uint32_t n, uint3
   return build_route_ex(c, start, stops, n, off, out_len, out_res, false, &mixed);   // 전부 전역 격자로 다시 잇는다
 }
 
+// 정지점마다 경로에서 가장 가까운 칸의 번호 (앞 정지점보다 뒤에서 찾는다). 경로가 없으면 전부 0
+bool stop_cells(const bt_ctx* c, const bt_path* path, const bt_stop* stops, uint32_t n, uint32_t* sidx) {
+  const uint32_t len = (path && path->cells) ? path->len : 0;
+  uint32_t from = 0;
+  for (uint32_t j = 0; j < n; ++j) {
+    double best = D_INF;
+    uint32_t at = from;
+    for (uint32_t i = from; i < len; ++i) {
+      float e, sl; uint8_t los; bt_xy p;
+      if (!cell_info(c, path->res_m, path->cells[i], &e, &sl, &los, &p)) return false;
+      const double d2 = (p.x - stops[j].xy.x) * (p.x - stops[j].xy.x) + (p.y - stops[j].xy.y) * (p.y - stops[j].xy.y);
+      if (d2 < best) { best = d2; at = i; }
+    }
+    sidx[j] = at;
+    from = at;
+  }
+  return true;
+}
+
+// 그 자리에서 지금 돌아서면 남는 여유(초)를 worst에 반영한다. 로버까지 길이 없으면 false
+bool margin_at(const bt_ctx* c, const FieldView& fv, bt_xy p, double limit, double k_ret, double t_there, double* worst, uint8_t* degraded) {
+  double back;
+  uint8_t deg;
+  if (!return_seconds(c, fv, p, &back, &deg)) { *worst = -1e9; return false; }
+  if (deg) *degraded = 1;
+  const double margin = limit - (t_there + k_ret * back);
+  if (margin < *worst) *worst = margin;
+  return true;
+}
+
 // 후보 하나를 만들고 평가한다. 출발 한계를 넘기면 만들지 않는다 (late_ok면 넘겨도 만든다)
 bool add_candidate(bt_ctx* c, const bt_state* st, uint8_t kind, uint8_t label_key, uint8_t flags,
                    const bt_stop* stops, uint32_t n_stops, bool late_ok) {
@@ -120,6 +150,16 @@ bool add_candidate(bt_ctx* c, const bt_state* st, uint8_t kind, uint8_t label_ke
     if (!build_route(c, st->pos, kind == BT_OPT_ROUTE ? stops : nullptr, kind == BT_OPT_ROUTE ? n_stops : 0, off, &len, &res)) return false;
     p.cells = D.pool + off; p.cap = len; p.len = len; p.res_m = res;
     if (bt_path_measure(c, &p, st, BT_WALK_PLAN, &pm) != BT_OK) return false;
+    if (kind == BT_OPT_ROUTE && n_stops > 1) {
+      // 들르는 정지점을 건너뛰어 곧게 펴면 안 된다 — 정지점을 꼭 지나는 선으로 시간·길이·두절을 다시 잰다
+      uint32_t sidx[BT_MAX_STOPS];
+      double sec = 0.0, length = 0.0, lost = 0.0;
+      if (!stop_cells(c, &p, stops, n_stops, sidx)) return false;
+      straight_measure(c, p.cells, p.len, p.res_m, BT_WALK_PLAN, sidx, n_stops, &sec, &length, &lost);
+      pm.time_min = static_cast<float>(sec / 60.0);
+      pm.length_m = static_cast<float>(length);
+      pm.comm_loss_min = static_cast<float>(lost / 60.0);
+    }
     if (bt_nlt_feasible(c, &p, stops, n_stops, st, &nl) != BT_OK) return false;
     if (nl.slack_min < 0) return false;                        // 출발 한계를 넘기는 옵션은 만들지 않는다
     for (uint32_t k = 0; k < n_stops; ++k) dwell += static_cast<double>(stops[k].dwell_min);
@@ -324,6 +364,9 @@ uint64_t inputs_digest(const bt_ctx* c, const bt_state* st, const bt_stop* plan,
 
 }  // namespace
 
+// 경로를 걷는 도중 어디서든 돌아서도 제때 로버에 닿는가. 가장 빠듯한 자리의 여유를 낸다.
+// 걷는 시간은 곧게 편 선으로 잰다(정지점은 꼭 지난다). 여유를 보는 자리: 출발점, 꺾이는 점 전부, 정지점(머문 뒤), 끝,
+// 그리고 긴 직선 구간 안에서는 경로의 1/16마다. 직선 구간 안에서 여유는 고르게 변하므로 그 사이의 값은 양 끝 값 사이에 있다
 bt_status bt_nlt_feasible(const bt_ctx* c, const bt_path* path, const bt_stop* stops, uint32_t n,
                           const bt_state* st, bt_nlt* out) {
   if (!c || !st || !out || (!stops && n > 0) || n > BT_MAX_STOPS) return BT_ERR_ARG;
@@ -335,47 +378,39 @@ bt_status bt_nlt_feasible(const bt_ctx* c, const bt_path* path, const bt_stop* s
   const uint32_t len = (path && path->cells) ? path->len : 0;
   double worst = D_INF;
   uint8_t degraded = 0;
-
-  // 정지점마다 경로에서 가장 가까운 칸 (앞 정지점보다 뒤에서 찾는다)
   uint32_t sidx[BT_MAX_STOPS];
-  uint32_t from = 0;
-  for (uint32_t j = 0; j < n; ++j) {
-    double best = D_INF;
-    uint32_t at = from;
-    for (uint32_t i = from; i < len; ++i) {
-      float e, sl; uint8_t los; bt_xy p;
-      if (!cell_info(c, path->res_m, path->cells[i], &e, &sl, &los, &p)) return BT_ERR_ARG;
-      const double d2 = (p.x - stops[j].xy.x) * (p.x - stops[j].xy.x) + (p.y - stops[j].xy.y) * (p.y - stops[j].xy.y);
-      if (d2 < best) { best = d2; at = i; }
-    }
-    sidx[j] = at;
-    from = at;
-  }
+  if (!stop_cells(c, path, stops, n, sidx)) return BT_ERR_ARG;
 
   double tau = 0.0;
   uint32_t j = 0;
-  float e_prev = 0.0f;
-  const uint32_t steps = len ? len : 1;
-  for (uint32_t i = 0; i < steps; ++i) {              // 경로 위 모든 지점에서: 거기서 로버까지 걸어서 제때 도착하는가
-    bt_xy p = st->pos;
-    if (len) {
-      float e, sl; uint8_t los;
-      if (!cell_info(c, path->res_m, path->cells[i], &e, &sl, &los, &p)) return BT_ERR_ARG;
-      if (i > 0) {
-        const bt_cell a = path->cells[i], q = path->cells[i - 1];
-        const double dist = ((a.row != q.row && a.col != q.col) ? SQRT2 : 1.0) * path->res_m;
-        tau += step_seconds(c, e_prev, e, dist, BT_WALK_PLAN);
+  bool ok = true;
+  if (len == 0) {                                    // 걷지 않는다(머물기): 머문 뒤 지금 자리에서
+    for (; j < n; ++j) tau += static_cast<double>(stops[j].dwell_min) * 60.0;
+    ok = margin_at(c, fv, st->pos, limit, k_ret, st->t + tau, &worst, &degraded);
+  } else {
+    const Geom pg{c->cfg.cost_grid.origin.x, c->cfg.cost_grid.origin.y, path->res_m, 0, 0};
+    const uint32_t stride = len > 16 ? len / 16 : 1;
+    while (j < n && sidx[j] == 0) { tau += static_cast<double>(stops[j].dwell_min) * 60.0; j += 1; }
+    ok = margin_at(c, fv, cell_center(pg, path->cells[0].row, path->cells[0].col), limit, k_ret, st->t + tau, &worst, &degraded);
+    uint32_t anchor = 0, pin = 0;
+    while (ok && anchor + 1 < len) {                 // 상한: 경로의 칸 수
+      while (pin < n && sidx[pin] <= anchor) pin += 1;
+      const uint32_t reach = straight_reach(c, path->cells, len, path->res_m, anchor, pin < n ? sidx[pin] : len - 1);
+      const bt_xy a = cell_center(pg, path->cells[anchor].row, path->cells[anchor].col);
+      const bt_xy b = cell_center(pg, path->cells[reach].row, path->cells[reach].col);
+      const double seg = straight_seconds(c, a, b, path->res_m, BT_WALK_PLAN, nullptr, nullptr);
+      for (uint32_t i = anchor + 1; ok && i < reach; ++i) {     // 긴 직선 구간 안의 표본
+        if (i % stride != 0) continue;
+        const double f = static_cast<double>(i - anchor) / static_cast<double>(reach - anchor);
+        ok = margin_at(c, fv, bt_xy{a.x + (b.x - a.x) * f, a.y + (b.y - a.y) * f}, limit, k_ret, st->t + tau + seg * f, &worst, &degraded);
       }
-      e_prev = e;
+      tau += seg;
+      while (j < n && sidx[j] == reach) { tau += static_cast<double>(stops[j].dwell_min) * 60.0; j += 1; }
+      if (ok) ok = margin_at(c, fv, b, limit, k_ret, st->t + tau, &worst, &degraded);
+      anchor = reach;
     }
-    while (j < n && (len == 0 || sidx[j] == i)) { tau += static_cast<double>(stops[j].dwell_min) * 60.0; j += 1; }
-    double back;
-    uint8_t deg;
-    if (!return_seconds(c, fv, p, &back, &deg)) { worst = -1e9; break; }
-    if (deg) degraded = 1;
-    const double margin = limit - (st->t + tau + k_ret * back);
-    if (margin < worst) worst = margin;
   }
+  (void)ok;
   out->t_depart = st->t + worst;
   out->slack_min = static_cast<float>(worst / 60.0);
   out->binding = binding;
@@ -509,14 +544,15 @@ bt_status bt_decide(bt_ctx* c, const bt_state* st, const bt_stop* plan, uint32_t
     const uint32_t reserve = (want_restore ? 1u : 0u) + (n_plan >= 2 ? 1u : 0u) + 2u;
     const uint32_t room = BT_MAX_CANDIDATES > D.n_cand + reserve ? BT_MAX_CANDIDATES - D.n_cand - reserve : 0;
     const uint32_t nh = c->sci.n_hyps;
-    bool hyp_ok = false;
+    bool hyp_late = false, hyp_flat = false;                                // 가설 옵션이 못 나온 까닭: 출발 한계 / 지도에 더한 것이 없음
     for (uint32_t k = nh > room ? nh - room : 0; k < nh; ++k) {             // 넘치면 최신 가설만
-      bool made = false;
+      bool made = false, has_target = false;
       const double scales[3] = {1.0, 0.5, 0.25};                            // 출발 한계에 안 맞으면 범위를 줄여 본다
       for (int si = 0; si < 3 && !made; ++si) {
         bt_stop stops[BT_MAX_STOPS];
         std::memset(stops, 0, sizeof(stops));
         if (!hyp_target(c, k, scales[si], &stops[0].xy)) continue;
+        has_target = true;
         // 이미 그 목표에 와 있거나(관측 반경 안), 계획이 이미 그 목표를 들르면 "가설 목표로"를 따로 만들지 않는다.
         // 만들면 "계획 유지"와 눈에 같은 선택지(같은 길, 같은 시간)가 하나 더 생긴다. 닿을 수 없어서 빠진 것이 아니므로 알림도 내지 않는다
         bool covered = near_m(st->pos, stops[0].xy, static_cast<double>(cfg.r_obs_m));
@@ -530,9 +566,11 @@ bt_status bt_decide(bt_ctx* c, const bt_state* st, const bt_stop* plan, uint32_t
           made = add_candidate(c, st, BT_OPT_ROUTE, BT_LABEL_HYP_TARGET, BT_OPTF_FROM_HYPOTHESIS, stops, 1 + keep, false);
         }
       }
-      if (made) hyp_ok = true;
+      // 까닭을 가려서 알린다: 목표는 있는데 출발 한계에 안 맞는 것과, 가설이 그 방향의 값을 올리지 않아 목표 자체가 없는 것은 다르다
+      if (!made) { if (has_target) hyp_late = true; else hyp_flat = true; }
     }
-    if (nh > 0 && !hyp_ok) out->notices = static_cast<uint16_t>(out->notices | BT_NOTICE_HYP_UNREACHABLE);
+    if (hyp_late) out->notices = static_cast<uint16_t>(out->notices | BT_NOTICE_HYP_UNREACHABLE);
+    if (hyp_flat) out->notices = static_cast<uint16_t>(out->notices | BT_NOTICE_HYP_NO_EFFECT);
 
     if (want_restore) add_candidate(c, st, BT_OPT_ROUTE, BT_LABEL_RESTORE_PLAN, 0, prev_plan, n_prev, false);
     if (n_plan >= 2) add_candidate(c, st, BT_OPT_ROUTE, BT_LABEL_DROP_LAST, 0, plan, n_plan - 1, false);

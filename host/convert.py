@@ -178,7 +178,8 @@ def decision_from_bt(core: bt.Core, d: bt.BtDecision, poi_ids: list[str], max_pt
         opts.append(option_from_bt(core, o, core.path_polyline(core.decision_path(d, i), via), poi_ids, max_pts))
     cause_name = bt.CAUSES[d.cause_kind]
     by_event = cause_name in ("obs", "hyp")
-    notices = [name for bit, name in ((bt.NOTICE_HYP_UNREACHABLE, "hyp_unreachable_within_nlt"), (bt.NOTICE_NO_FEASIBLE_RETURN, "no_feasible_return")) if d.notices & bit]
+    notices = [name for bit, name in ((bt.NOTICE_HYP_UNREACHABLE, "hyp_unreachable_within_nlt"), (bt.NOTICE_NO_FEASIBLE_RETURN, "no_feasible_return"),
+                                     (bt.NOTICE_HYP_NO_EFFECT, "hyp_no_effect")) if d.notices & bit]
     return w.DecisionPoint(
         dp_id=f"{bt.NODE_NAME[d.node]}:dp-{d.seq:02d}", trigger=bt.TRIGGERS[d.trigger],
         cause=f"{bt.NODE_NAME.get(d.cause_node, '?')}:{d.cause_lts}" if by_event else cause_name,
