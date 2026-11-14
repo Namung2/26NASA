@@ -1,0 +1,39 @@
+# D1 — 보여 주기용 시나리오 (docs/spec/S5 §7.2, SCENARIOS §4.2)
+#
+# 순서: P2 도착 → 예상 밖의 발견 → 가설 → 가설 옵션 선택 → 연결 끊김 → 끊긴 채로 관측 → 다시 이어짐 → 출발 한계 → 귀환.
+# 화면 없이 돌릴 때는 가설과 선택을 아래 events/choices가 대신 넣는다. 화면을 붙여 돌릴 때는 사람이 직접 한다.
+# 판정(expect)은 없다 — 통과 기준은 완주이고, 끊김 장면의 판정은 V2가 한다. timing은 단계별 응답 시간을 리포트로만 낸다.
+scenario: D1_demo
+kind: D
+site: jezero_west_v1
+seed: 17
+nodes: [suit-A]
+start:
+  eva_elapsed_min: 280.4
+  pos: {poi: P1}
+  rover_park: park1
+poi_plan: [P2, P3]
+dwell_min: {P2: 34, P3: 20}
+events:
+  - at: {poi: P2, dwell_min: 4}                     # 1. 예상 밖의 발견
+    type: obs
+    payload: {kind: found, signal: unexpected_mineral, confirmed: false}
+  - at: {after_event: 1, delay_min: 1}              # 2. 가설
+    type: hyp
+    payload: {rule: strata_continuity, extent_m: 300, confidence: 0.5}
+  - at: {after_event: 2, delay_min: 3}              # 3. 연결 끊김
+    type: link
+    payload: {state: LOST, ch: both}
+  - at: {after_event: 3, delay_min: 3}              # 4. 끊긴 채로 관측 (카드가 내려가고 선택지 정지가 된 뒤)
+    type: obs
+    payload: {kind: found, signal: unexpected_mineral, confirmed: false}
+  - at: {after_event: 4, delay_min: 2}              # 5. 다시 이어짐
+    type: link
+    payload: {state: AUTO, ch: both}
+choices:
+  - {when: {trigger: fork, cause_event: 2}, pick: {from_hypothesis: true}, delay_s: 30}     # 가설에서 나온 옵션을 고른다
+  - {when: {trigger: safety}, pick: {label_key: return_rover}}
+timing:
+  - {step: "가설 → 새 결정 지점", event: 2, kind: dp, max_s: 120}
+  - {step: "연결 끊김 → 로컬 모드 표시", event: 3, kind: mode_local, max_s: 5.5}
+  - {step: "다시 이어짐 → 끊긴 동안의 관측을 원인으로 한 결정 지점", event: 4, kind: dp_after_reconnect, max_s: 120}

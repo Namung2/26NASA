@@ -31,6 +31,7 @@ class Bundle:
     layers: dict = field(default_factory=dict)   # 이름 → (배열, 메타의 레이어 항목)
     sun: dict = field(default_factory=dict)      # sun_table.json
     dose_rate_uSv_h: float = 27.9                # 환경 자료가 없을 때 쓰는 평상시 선량률
+    weather: dict = field(default_factory=dict)  # 기상 리플레이: {"tau": [...], "t_air_k": [...]} — 태양 표와 같은 줄 번호
 
     def attach(self, core: bt.Core, park_id: str | None = None) -> list[str]:
         """번들의 레이어를 코어에 연결한다. 연결한 레이어 이름을 돌려준다.
@@ -51,23 +52,59 @@ class Bundle:
             done.append("los")
         return done
 
-    def sun_at(self, t_eva_s: float) -> dict:
-        """EVA 경과 초 → 그 시각의 태양 표 한 줄 {elev_deg, az_deg, shadow_bin, t_sunset_s}. 표 밖이면 가까운 끝 줄."""
+    def _row(self, t_eva_s: float) -> int:
+        """EVA 경과 초 → 태양 표·기상 표의 줄 번호. 표 밖이면 가까운 끝 줄."""
         t = self.sun["t_eva_s"]
-        i = min(len(t) - 1, max(0, bisect.bisect_left(t, t_eva_s)))
+        return min(len(t) - 1, max(0, bisect.bisect_left(t, t_eva_s)))
+
+    def sun_at(self, t_eva_s: float) -> dict:
+        """EVA 경과 초 → 그 시각의 태양 표 한 줄 {elev_deg, az_deg, shadow_bin, t_sunset_s}."""
+        i = self._row(t_eva_s)
         return {"elev_deg": self.sun["elev_deg"][i], "az_deg": self.sun["az_deg"][i], "shadow_bin": self.sun["shadow_bin"][i],
                 "t_sunset_s": self.sun["t_sunset_s"], "lmst_min": self.sun["lmst_min"][i]}
 
-    def env_at(self, t_eva_s: float, tau_dust: float = 0.0, dose_rate: float | None = None, spe: bool = False) -> bt.BtEnv:
-        """그 시각의 환경 구조체. 먼지·선량률·SPE는 환경 리플레이(시뮬레이터)가 줄 값이고, 안 주면 평상시 값이다."""
+    def weather_at(self, t_eva_s: float) -> dict:
+        """그 시각의 기상 리플레이 값 {tau, t_air_c}. 리플레이가 없으면 tau 0, 기온 None.
+
+        tau는 9 µm 적외선 값이다(메타의 env.tau_kind). 경고 임계값 env.dust_tau_warn과 같은 양이다.
+        """
+        if not self.weather:
+            return {"tau": 0.0, "t_air_c": None}
+        i = self._row(t_eva_s)
+        k = self.weather["t_air_k"][i]
+        return {"tau": self.weather["tau"][i], "t_air_c": None if k is None else k - 273.15}
+
+    def env_at(self, t_eva_s: float, tau_dust: float | None = None, dose_rate: float | None = None, spe: bool = False) -> bt.BtEnv:
+        """그 시각의 환경 구조체. 먼지는 번들의 기상 리플레이에서 읽는다(tau_dust를 주면 그 값으로 덮는다 — 시나리오가 주입할 때).
+        선량률은 평상시 값, SPE는 시나리오가 켠다."""
         s = self.sun_at(t_eva_s)
         e = bt.BtEnv()
         e.sun_elev_deg, e.sun_az_deg, e.t_sunset_s = s["elev_deg"], s["az_deg"], s["t_sunset_s"]
         e.shadow_bin = int(s["shadow_bin"])
-        e.tau_dust = tau_dust
+        e.tau_dust = self.weather_at(t_eva_s)["tau"] if tau_dust is None else tau_dust
         e.dose_rate_uSv_h = self.dose_rate_uSv_h if dose_rate is None else dose_rate
         e.spe = 1 if spe else 0
         return e
+
+    def initial_events(self) -> list[bt.BtEvent]:
+        """번들의 events0.json(선행 임무의 시료 결과)을 코어 이벤트로 바꾼다. 시작할 때 core.log_merge에 넣는다.
+
+        글자(시료 이름, 근거 문장)는 코어에 들어가지 않는다 — 화면에 보이려면 호스트가 (node, lts)를 열쇠로 따로 들고 있어야 한다.
+        """
+        path = self.root / "events0.json"
+        if not path.exists():
+            return []
+        out = []
+        for e in json.loads(path.read_text()):
+            if e.get("type") != "obs":
+                continue
+            ev = bt.BtEvent()
+            ev.lts, ev.node, ev.type, ev.ts = int(e["lts"]), bt.NODE[e["node"]], bt.EV_OBS, float(e["ts"])
+            ev.x, ev.y = float(e["geom"]["xy"][0]), float(e["geom"]["xy"][1])
+            ev.flags = (bt.EVF_FOUND if e["payload"]["kind"] == "found" else 0) | (bt.EVF_CONFIRMED if e["payload"].get("confirmed") else 0)
+            ev.seq = int(e["lts"])
+            out.append(ev)
+        return out
 
     def park_xy(self, park_id: str) -> tuple[float, float]:
         for p in self.meta["rover_parks"]:
@@ -102,6 +139,11 @@ def load(root: str, level: str = "field") -> Bundle:
     res = float(meta["levels_m"][0 if level == "field" else 1])
     b = Bundle(root=r, meta=meta, level=level, res_m=res, sun=json.loads((r / meta["sun_table"]).read_text()))
     science = {"mu0", "var0", "units", "minerals"}
+    if meta.get("env_files"):                                                        # 기상 리플레이 표
+        import csv
+        with open(r / meta["env_files"][0], newline="") as f:
+            rows = list(csv.DictReader(f))
+        b.weather = {"tau": [float(x["tau"]) for x in rows], "t_air_k": [float(x["t_air_k"]) if x["t_air_k"] else None for x in rows]}
     for lay in meta["layers"]:
         is_science = lay["name"] in science
         if not is_science and abs(lay["res_m"] - res) > 1e-6:

@@ -81,7 +81,7 @@ science:
   default_res_m:          {value: 20,     unit: m, status: TUNE, source: "광물 래스터가 없을 때의 과학 격자"}
 
 env:
-  dust_tau_warn:    {value: 1.0,  status: TUNE, source: "먼지 광학 두께 경고 — 받은 기상 자료를 보고 다시 정한다"}
+  dust_tau_warn:    {value: 0.414, status: DESIGN, source: "먼지 광학 두께(9 µm 적외선 값) 경고. Jezero의 실측 기록(Smith 2022, sol 15~400, 5분 간격 56,368점) 가운데 95 %가 이 값 아래다 — 번들을 만들 때 다시 계산해 메타의 env.tau_p95_record에 적는다. 95 %라는 기준은 우리 선택. 가시광 tau의 임계가 아니다(REFERENCE §6.2)"}
 
 safety:
   dose_warn_uSv:     {value: null, unit: uSv, status: TBD, source: "출처 있는 값을 찾기 전에는 비워 둔다 — 비어 있으면 선량은 표시만 한다"}
@@ -101,6 +101,9 @@ link:
     loss_allow_db:     {value: 126.8, unit: dB,  status: REF,    source: "빌린 값: 아폴로 15 우주복→착륙선 VHF 링크의 실측 한계. 송신 +25.7 dBm, 우주복 안테나 −2.0 dB, 케이블 −1.9 dB, 수신 한계 −105 dBm → 25.7 − 2.0 − 1.9 + 105 = 126.8 dB (NASA MSC-05161 Suppl. 6, 1972, p. 2-7·2-13)"}
     fade_margin_db:    {value: 9.77,  unit: dB,  status: REF,    source: "Foore & Ida 2007 Table I, 401 MHz 로버(3 m)→우주인(2 m): 평균 3.25 dB + 2 × 표준편차 3.26 dB. 표준편차의 2배(약 95 %)로 잡은 것은 우리 선택. Nokia 2024의 그늘 여유 10 dB와 비슷하다"}
   hb_hz:            {value: 1,    unit: Hz, status: DESIGN, source: "SYSTEM §3.9"}
+  sync_batch:       {value: 16,   status: TUNE, source: "동기화 메시지 하나에 싣는 이벤트 수 (호스트)"}
+  path_max_pts:     {value: 32,   status: TUNE, source: "결정 지점을 UHF로 보낼 때 옵션 하나의 경로에 싣는 점의 최대 개수 (호스트)"}
+  wifi_range_m:     {value: 300,  unit: m, status: TUNE, source: "시뮬에서 Wi-Fi가 된다고 보는 로버까지의 거리 — 가정 (호스트)"}
   lost_dp_s:        {value: 120,  unit: s,  status: TUNE, source: "UHF 두절이 이만큼 이어지면 선택지 정지"}
   uhf:  &channel
     timeout_ms:     {value: 500,  unit: ms, status: TUNE, source: "하트비트 응답 한계"}
@@ -110,3 +113,12 @@ link:
     loss_down:      {value: 0.85, status: TUNE, source: "손실률 임계 — 연속 5번(0.83)보다 먼저 발동하지 않게"}
     rtt_down_ms:    {value: 400,  unit: ms, status: TUNE, source: "왕복 시간 평균의 임계"}
   wifi: *channel
+
+# 화면 메뉴의 단계 → 값 (호스트만 쓴다. 코어에는 고른 값이 들어간다)
+menu:
+  extent_levels_m:    {value: [100, 300, 1000], unit: m, status: TUNE, source: "가설 메뉴의 범위 3단계"}
+  confidence_levels:  {value: [0.17, 0.5, 0.83], status: DESIGN, source: "가설 메뉴의 확신 3단계(가능성 낮음 / 반반 / 가능성 높음). IPCC 가능성 척도 구간(0~33 / 33~66 / 66~100 %)의 가운데 — REFERENCE §4.3"}
+  mark_radius_levels_m: {value: [10, 30, 100], unit: m, status: TUNE, source: "막힘 표시의 반경 3단계"}
+  arrive_radius_m:    {value: 10, unit: m, status: TUNE, source: "정지점에 닿았다고 보는 거리 (호스트가 계획에서 지난 지점을 뺄 때)"}
+  note_max_chars:     {value: 200, status: TUNE, source: "자유 메모 한 건의 글자 수 상한"}
+  trace_snapshot_max: {value: 64, status: TUNE, source: "화면에 보내는 주의 흔적의 최대 개수"}

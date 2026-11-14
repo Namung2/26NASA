@@ -14,6 +14,36 @@ import numpy as np
 from .layers import MINERAL_KEYS, UNIT_CODES
 
 
+def initial_events(site: dict, to_xy) -> list[dict]:
+    """선행 임무의 시료 결과를 "확인된 관측" 이벤트로 만든다 (번들의 events0.json, 형식은 S2 §2의 Event).
+
+    site.yaml의 samples 목록에서 organics가 true 또는 false로 적힌 것만 이벤트가 된다:
+        true  → kind "found"      (그 노두에서 유기물이 보고됐다)
+        false → kind "not_found"  (살폈는데 없다고 보고됐다)
+        null  → 이벤트를 만들지 않는다 (보고가 없는 것을 "없음"으로 적지 않는다)
+    노드는 "ground", 확인됨(confirmed)이다 — 코어가 현장 관측과 같은 식으로 지도에 반영하고, 확인된 관측이라 그 자리의
+    값을 강하게 당긴다. 시각(ts)은 0, 순서 번호(lts)는 목록 순서다. to_xy = (lon, lat) → 로컬 좌표 함수.
+    주의: "유기물이 보고됐다"는 생명의 흔적이 확인됐다는 뜻이 아니다. 근거 문장은 note와 source에 그대로 싣는다.
+    """
+    out = []
+    for s in site.get("samples", []):
+        if s.get("organics") is None:
+            continue
+        x, y = to_xy(float(s["lon_e"]), float(s["lat_n"]))
+        half2 = 2.0 * float(site["aoi"]["half_size_m"])
+        if not (0.0 <= x <= half2 and -half2 <= y <= 0.0):
+            continue                                          # 구역 밖
+        lts = len(out) + 1
+        out.append({
+            "id": f"ground:{lts}", "ts": 0.0, "lts": lts, "node": "ground", "type": "obs",
+            "geom": {"kind": "point", "xy": [round(x, 1), round(y, 1)]}, "approved": True,
+            "payload": {"obs_id": f"ground:o-{lts:03d}", "kind": "found" if s["organics"] else "not_found",
+                        "signal": "prior_sample", "confirmed": True,
+                        "note": f"{s['name']}: {s.get('note', '')} [{s.get('source', '')}]"},
+        })
+    return out
+
+
 def _row_stats(table: dict, name: str) -> tuple[float, float]:
     """등급표 한 줄의 (값, 분산).
 

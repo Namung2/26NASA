@@ -16,7 +16,7 @@ from pathlib import Path
 import numpy as np
 import yaml
 
-from . import bundle, dtm, layers, poi, prior, register, suntable, terrain
+from . import bundle, dtm, layers, poi, prior, register, suntable, terrain, tiles, weather
 
 
 class MissingSource(Exception):
@@ -74,6 +74,20 @@ def run(site_path: str, out_dir: str, params_path: str = "config/params.yaml", t
     sun = suntable.build(site, n_bins)
     (out / "sun_table.json").write_text(json.dumps(sun))
     step(f"태양 표: 일출 {sun['sunrise_lmst']} 일몰 {sun['sunset_lmst']} (지방 평균시), Ls {sun['ls_deg']}°", t0)
+
+    # 기상 리플레이: 태양 표와 같은 날의 실측 먼지·기온을 분 단위 표로
+    env_info, env_files = {}, []
+    if site.get("weather") and Path(site["weather"]["tau"]["path"]).exists():
+        t0 = time.time()
+        (out / "env").mkdir(exist_ok=True)
+        rows, env_info = weather.build(site, sun)
+        with open(out / env_info["file"], "w", newline="") as f:
+            wr = __import__("csv").DictWriter(f, fieldnames=list(rows[0].keys()))
+            wr.writeheader()
+            wr.writerows(rows)
+        env_files.append(env_info["file"])
+        step(f"기상 리플레이 sol {env_info['sol']}: tau {env_info['tau_min']}~{env_info['tau_max']} (선외활동 8시간 안에서는 {env_info['tau_eva_min']}~{env_info['tau_eva_max']}), "
+             f"실측이 있는 분 {env_info['tau_measured_pct']} %, 기온이 있는 분 {env_info['t_air_pct']} %, 기록 전체의 95 % 지점 {env_info['tau_p95_record']}", t0)
 
     parks = [{"id": p["id"], "xy": list(poi.site_xy(site, p))} for p in site.get("rover_parks", [])]
 
@@ -185,9 +199,21 @@ def run(site_path: str, out_dir: str, params_path: str = "config/params.yaml", t
     step(f"과학 격자 {sgrid.h}×{sgrid.w} @ {sres:.0f} m: 값 있는 칸 {100 * np.isfinite(mu0).mean():.1f} %, 등급 경계 {grade_bins[0]:.3f} / {grade_bins[1]:.3f}", t0)
 
     pois = poi.build_pois(site, mu0, var0, sgrid)
-    (out / "events0.json").write_text("[]")
+    events0 = prior.initial_events(site, lambda lon, lat: dtm.lonlat_to_xy(site, lon, lat))
+    (out / "events0.json").write_text(json.dumps(events0, ensure_ascii=False, indent=1))
+    # 시료 지점은 지도 표시용으로 메타에 싣는다(유기물 보고가 확정된 것만 위의 이벤트가 된다)
+    samples_meta = []
+    for smp in site.get("samples", []):
+        x, y = dtm.lonlat_to_xy(site, float(smp["lon_e"]), float(smp["lat_n"]))
+        if 0.0 <= x <= 2 * float(site["aoi"]["half_size_m"]) and -2 * float(site["aoi"]["half_size_m"]) <= y <= 0.0:
+            samples_meta.append({"id": smp["id"], "name": smp["name"], "cores": smp.get("cores", []), "xy": [round(x, 1), round(y, 1)],
+                                 "lithology": smp.get("lithology", ""), "organics": smp.get("organics"), "note": smp.get("note", ""),
+                                 "source": smp.get("source", "")})
+    print(f"  선행 시료: 구역 안 {len(samples_meta)}곳, 그 가운데 관측 이벤트가 된 것 {len(events0)}건")
     (out / "config.json").write_text(json.dumps({"site": site, "tiers": tiers, "params": params, "prior_table": table}, ensure_ascii=False, default=str))
-    missing += ["weather", "radiation", "tiles", "photos"]        # 아직 만들지 않는 것 — 화면이 "없음"으로 표시한다
+    if not env_files:
+        missing.append("weather")
+    missing += ["tiles", "photos"]                                # tiles는 끝에서 tiles.build가 만들고 이 목록에서 뺀다. photos는 아직 없다
     half = float(site["aoi"]["half_size_m"])
     meta = {
         "bundle_id": f"{site['site']}_v{site['bundle_version']}", "schema_version": 1, "site": site["site"],
@@ -199,12 +225,17 @@ def run(site_path: str, out_dir: str, params_path: str = "config/params.yaml", t
         "rover_parks": [{"id": p["id"], "xy": [round(p["xy"][0], 1), round(p["xy"][1], 1)], "los_file": p.get("los_file", "")} for p in parks],
         "params": _params_list(params), "grade_bins": list(grade_bins),
         "shadow_bins_lmst": [b["from_lmst"] for b in sun["bins"]] + [sun["bins"][-1]["to_lmst"]],
-        "sun_table": "sun_table.json", "env_files": [], "missing_layers": missing,
+        "sun_table": "sun_table.json", "env_files": env_files, "env": env_info, "missing_layers": missing,
         "scenario_hint": site.get("scenario_hint", {}),
+        "samples": samples_meta,
         "unit_codes": layers.UNIT_CODES, "mineral_codes": {key: num for num, key in layers.MINERAL_KEYS.items()},
         "prior_values": [{"unit": u, "mineral": m, "mu": round(v[0], 4), "var": round(v[1], 4)} for (u, m), v in prior.lookup(table).items()],
     }
     meta = bundle.finish(out, meta, float(params["bundle"]["field_limit_mb"]["value"]) * 1e6)
+    t0 = time.time()
+    tinfo = tiles.build(out)                                      # 표시용 타일 — 방금 쓴 레이어를 그림으로 굽고 메타에 tiles 항목을 더한다
+    meta = json.loads((out / "meta.json").read_text())
+    step(f"표시용 타일 {len(tinfo['layers'])}개 레이어", t0)
     print(f"  번들 {meta['bundle_id']}: field/ {meta['field_size_bytes'] / 1e6:.1f} MB, 파일 {len(meta['sha256'])}개, 링크 되는 칸 {[(p['id'], p.get('visible_pct')) for p in parks]} % (눈으로 보이는 칸 {[p.get('optical_pct') for p in parks]} %)")
     return meta
 

@@ -29,7 +29,7 @@ extern "C" {
 #  define BT_API
 #endif
 
-#define BT_ABI_VERSION 3u
+#define BT_ABI_VERSION 4u
 
 /* ── 용량 상수 ─────────────────────────────────────────────────────────── */
 #define BT_MAX_OPTIONS     3
@@ -341,8 +341,15 @@ BT_API bt_status bt_field_copy(const bt_ctx*, bt_field_id id, bt_raster* out_tim
 BT_API bt_status bt_return_path(bt_ctx*, bt_field_id field, bt_xy start, bt_path* out);
 BT_API bt_status bt_path_measure(bt_ctx*, const bt_path*, const bt_state*, bt_walk_mode mode, bt_path_metrics* out);
 BT_API bt_status bt_alternatives(bt_ctx*, bt_xy start, bt_xy goal, const bt_budget*, bt_path* out, uint32_t cap, uint32_t* n);
+/* 경로의 꺾이는 점만 낸다(칸 중심의 좌표, 시작·끝 포함). 격자 경로는 8방향이라 계단 모양인데, 사이를 직선으로 이어도
+ * 통과 가능한 곳만 지나는 구간은 선 하나로 줄인다. 화면에 그릴 때와 UHF로 보낼 때(점 수를 줄여야 한다) 쓴다.
+ * 걷는 시간·길이 같은 수치는 여전히 칸 경로로 잰다(bt_path_measure) — 직선보다 몇 % 길게 잡히는 쪽이라 안전한 쪽이다. */
+BT_API bt_status bt_path_polyline(const bt_ctx*, const bt_path*, bt_xy* out, uint32_t cap, uint32_t* n);
+/* 들를 지점과 순서를 고른다: start에서 출발해 고른 지점을 차례로 들르고 end에 닿는 걷는 시간 + 체류 시간이
+ * budget->time_s 안에 드는 것 가운데 과학 가치의 합이 가장 큰 것. 값이 같으면 시간이 짧은 쪽, 그것도 같으면 번호가 앞선 쪽.
+ * time_s ≤ 0이면 시간 제한 없이 전부 들르는 가장 짧은 순서. n ≤ BT_MAX_STOPS. out은 n칸 이상. */
 BT_API bt_status bt_select_pois(bt_ctx*, const bt_stop* pois, uint32_t n, bt_xy start, bt_xy end,
-                                const bt_budget*, bt_stop* out, uint32_t* out_n);          /* S */
+                                const bt_budget*, bt_stop* out, uint32_t* out_n);
 
 /* 이벤트 로그 (S3a §4) */
 BT_API bt_status bt_log_append(bt_ctx*, bt_event* ev_inout);       /* lts와 node를 채운다 */

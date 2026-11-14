@@ -1,0 +1,41 @@
+# V2 — 연결 끊김 검증 시나리오 (docs/spec/S5 §7.3, V-3, R-40~R-42)
+#
+# 연결이 끊긴 동안은 화면이 다르다: 로컬 모드 표시, 2분(link.lost_dp_s)까지는 떠 있던 카드에 계산 시각 표시,
+# 그 뒤로는 선택지 정지와 대기 건수. 그래서 V1과 따로 검증한다. 지형·주차점·시작 조건은 V1과 같다.
+# 끊긴 동안에도 귀환 경로와 출발 한계는 EVA 전에 받은 귀환 지도로 계속 나와야 한다.
+scenario: V2_link_loss
+kind: V
+site: jezero_west_v1
+seed: 17
+nodes: [suit-A]
+start:
+  eva_elapsed_min: 280.4
+  pos: {poi: P1}
+  rover_park: park1
+poi_plan: [P2, P3]
+dwell_min: {P2: 34, P3: 20}
+events:
+  - at: {poi: P2, dwell_min: 2}                     # 1. 연결된 채로 관측 → 로버가 카드를 보낸다
+    type: obs
+    payload: {kind: found, signal: unexpected_mineral, confirmed: false}
+  - at: {after_event: 1, delay_min: 3}              # 2. 카드가 떠 있는 채로 끊김
+    type: link
+    payload: {state: LOST, ch: both}
+  - at: {after_event: 2, delay_min: 2}              # 3. 끊긴 채로 관측 → 기기 로그에 쌓인다
+    type: obs
+    payload: {kind: found, signal: unexpected_mineral, confirmed: false}
+  - at: {after_event: 3, delay_min: 4}              # 4. 다시 이어짐 (AUTO = 지형의 링크 지도를 다시 따른다)
+    type: link
+    payload: {state: AUTO, ch: both}
+choices:
+  - {when: {trigger: fork, cause_event: 3}, pick: {label_key: stay}, delay_s: 30}     # 다시 이어진 뒤 로버가 보낸 카드에서 고른다
+  - {when: {trigger: safety}, pick: {label_key: return_rover}}
+expect:
+  - decision_point_within_min_of_event: {event: 1, max_min: 2}
+  - local_mode_entered_within_s: {event: 2, max_s: 5.5}       # n_down / hb_hz + timeout_ms (S4 §3)
+  - options_paused_while_lost: true
+  - no_option_violates_return_limit: true
+  - options_same_format: true
+  - queue_merged_after_reconnect: {node: suit-A}
+  - decision_point_after_reconnect_within_min: {cause_event: 3, max_min: 2}
+  - rerun_identical: true

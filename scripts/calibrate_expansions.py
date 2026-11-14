@@ -83,7 +83,7 @@ def main() -> None:
     if args.write:
         text = Path(TIERS).read_text()
         for r in results:
-            block = re.search(rf"(\n  {r['tier']}:.*?max_expansions: )(\d+)([^\n]*)", text, flags=re.S)
+            block = re.search(rf"(\n  {r['tier']}:.*?max_expansions: )(\d+)([^\n]*)", text, flags=re.DOTALL)
             text = text[:block.start(2)] + str(r["max_expansions"]) + f"          # {time.strftime('%Y-%m-%d')}에 이 기기에서 보정 (scripts/calibrate_expansions.py). 기기: {machine}" + text[block.end(3):]
         Path(TIERS).write_text(text)
         print(f"  → {TIERS} 에 써 넣었다")

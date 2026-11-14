@@ -619,6 +619,73 @@ bt_status bt_cost_to_go(bt_ctx* c, bt_xy target, bt_walk_mode mode, bt_field_id 
   return BT_OK;
 }
 
+namespace {
+
+// 그 좌표가 걸을 수 있는 곳인가. 경로가 전역 코스트맵의 격자 위면 그것을 보고, 아니면(고운 격자 경로) 레이어와 막힘 표시를 직접 본다
+bool walkable_at(const bt_ctx* c, double res_m, bt_xy p) {
+  const CostMap& m = c->cm;
+  if (m.built && std::fabs(res_m - m.res) < 1e-9) {
+    int32_t r, col;
+    if (!xy_to_cell(cm_geom(c), p, &r, &col)) return false;
+    return m.passable[static_cast<uint32_t>(r) * m.w + static_cast<uint32_t>(col)] != 0;
+  }
+  const bt_grid_geom& bg = c->cfg.cost_grid;
+  int32_t r, col;
+  if (!xy_to_cell(geom_of(bg), p, &r, &col)) return false;
+  const uint64_t i = static_cast<uint64_t>(r) * bg.w + static_cast<uint64_t>(col);
+  const float s = raster_f(c->layer[BT_LAYER_SLOPE], i);
+  if (!(s == s) || s > c->cfg.theta_max_deg) return false;
+  if (c->layer_set[BT_LAYER_ELEV]) { const float e = raster_f(c->layer[BT_LAYER_ELEV], i); if (!(e == e)) return false; }
+  for (uint32_t e = 0; e < c->log_n; ++e) {                      // 막힘 표시
+    const bt_event& ev = c->log[e];
+    if (ev.type != BT_EV_MARK || ev.kind != BT_MARK_BLOCKED) continue;
+    const double dx = p.x - ev.x, dy = p.y - ev.y;
+    if (dx * dx + dy * dy <= static_cast<double>(ev.a) * static_cast<double>(ev.a)) return false;
+  }
+  return true;
+}
+
+// a에서 b까지 직선으로 걸어도 되는가. 선 위와 양옆(칸의 0.3배)을 반 칸 간격으로 짚어 본다 — 모서리를 스치는 것을 막는다
+bool straight_ok(const bt_ctx* c, double res_m, bt_xy a, bt_xy b) {
+  const double dx = b.x - a.x, dy = b.y - a.y, len = std::sqrt(dx * dx + dy * dy);
+  if (len < 1e-9) return true;
+  const double nx = -dy / len * 0.3 * res_m, ny = dx / len * 0.3 * res_m;
+  const uint32_t steps = static_cast<uint32_t>(len / (0.5 * res_m)) + 1;
+  for (uint32_t k = 0; k <= steps; ++k) {
+    const double t = static_cast<double>(k) / steps;
+    const bt_xy p{a.x + dx * t, a.y + dy * t};
+    if (!walkable_at(c, res_m, p) || !walkable_at(c, res_m, bt_xy{p.x + nx, p.y + ny}) || !walkable_at(c, res_m, bt_xy{p.x - nx, p.y - ny})) return false;
+  }
+  return true;
+}
+
+}  // namespace
+
+bt_status bt_path_polyline(const bt_ctx* c, const bt_path* path, bt_xy* out, uint32_t cap, uint32_t* n) {
+  if (!c || !path || !path->cells || !out || !n || path->len == 0 || !(path->res_m > 0)) return BT_ERR_ARG;
+  if (!c->layer_set[BT_LAYER_SLOPE]) return BT_ERR_NOT_READY;
+  const Geom pg{c->cfg.cost_grid.origin.x, c->cfg.cost_grid.origin.y, path->res_m, 0, 0};
+  constexpr uint32_t LOOK = 512;                                 // 한 번에 건너뛰어 보는 칸 수의 상한
+  uint32_t count = 0, anchor = 0;
+  *n = 0;
+  if (cap == 0) return BT_ERR_CAPACITY;
+  out[count++] = cell_center(pg, path->cells[0].row, path->cells[0].col);
+  while (anchor + 1 < path->len) {                               // 상한: 경로의 칸 수
+    const bt_xy a = cell_center(pg, path->cells[anchor].row, path->cells[anchor].col);
+    uint32_t reach = anchor + 1;                                 // 바로 다음 칸은 언제나 갈 수 있다(경로의 일부)
+    const uint32_t stop = anchor + LOOK < path->len - 1 ? anchor + LOOK : path->len - 1;
+    for (uint32_t j = anchor + 2; j <= stop; ++j) {              // 직선으로 닿는 가장 먼 칸
+      if (!straight_ok(c, path->res_m, a, cell_center(pg, path->cells[j].row, path->cells[j].col))) break;
+      reach = j;
+    }
+    if (count >= cap) return BT_ERR_CAPACITY;
+    out[count++] = cell_center(pg, path->cells[reach].row, path->cells[reach].col);
+    anchor = reach;
+  }
+  *n = count;
+  return BT_OK;
+}
+
 bt_status bt_set_field(bt_ctx* c, bt_field_id id, const bt_raster* time, const bt_raster* next) {
   if (!c || id != BT_FIELD_ROVER_RETURN || !time || !next || !time->data || !next->data) return BT_ERR_ARG;
   if (time->dtype != BT_DT_F32 || next->dtype != BT_DT_U8) return BT_ERR_ARG;

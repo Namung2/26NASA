@@ -1,0 +1,33 @@
+# V1 — 아폴로 17 EVA-2 Station 4의 "구조"를 옮긴 검증 시나리오 (docs/spec/S5 §7.1, SCENARIOS §3, R-61)
+#
+# 옮기는 것은 지점이 아니라 순서다: 발견 지점에 EVA 경과 4 h 49 m쯤 도착 → 예상 밖의 발견 → 가설 → 선택 → 출발 한계 → 귀환.
+# 아폴로 17의 착륙선이 여기서는 로버다. 출발 한계는 맞춰 넣지 않고 시간 규칙에서 나온다(코어의 bt_depart_limit).
+# 지점(P1, P2, P3)과 주차점은 번들의 배치를 이름으로 가리킨다(scripts/place_scenario.py가 놓은 것).
+scenario: V1_apollo17_station4
+kind: V
+site: jezero_west_v1
+seed: 17
+nodes: [suit-A]
+start:
+  eva_elapsed_min: 280.4          # P1에서 출발. P2까지 약 8.6분 → 도착이 약 289분(4 h 49 m)
+  pos: {poi: P1}
+  rover_park: park1
+poi_plan: [P2, P3]                # P1은 시작 전에 끝난 것으로 본다
+dwell_min: {P2: 34, P3: 20}
+events:
+  - at: {poi: P2, dwell_min: 4}                     # 1. 도착 4분 뒤 예상 밖의 발견 (아폴로 17은 3분 45초 뒤)
+    type: obs
+    payload: {kind: found, signal: unexpected_mineral, confirmed: false}
+  - at: {after_event: 1, delay_min: 1}              # 2. 1분 뒤 가설 (방향은 배치가 고른 것)
+    type: hyp
+    payload: {rule: strata_continuity, extent_m: 300, confidence: 0.5}
+choices:
+  - {when: {trigger: fork, cause_event: 2}, pick: {label_key: stay}, delay_s: 30}     # 현 지점을 마무리한다 (P3를 포기)
+  - {when: {trigger: safety}, pick: {label_key: return_rover}}                        # 출발 한계에 닿으면 귀환
+expect:
+  - decision_point_within_min_of_event: {event: 1, max_min: 2}
+  - option_from_hypothesis_present: true
+  - no_option_violates_return_limit: true
+  - options_same_format: true
+  - metrics_match_independent: {tol: 0.05}
+  - rerun_identical: true

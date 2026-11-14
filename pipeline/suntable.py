@@ -68,6 +68,7 @@ def build(site: dict, n_bins: int) -> dict:
 
     돌려주는 사전 (sun_table.json 그대로)
         lmst_min[i]   지방 평균 태양시, 분 (0 ~ 1439)
+        ltst_h[i]     지방 진태양시, 시 (평균시와 수십 분 다르다 — 균시차)
         t_eva_s[i]    EVA 경과 초 (site.sun.eva_start_lmst가 0초). 시작 전은 음수
         elev_deg[i], az_deg[i]
         shadow_bin[i] 그 시각이 속한 그림자 구간 (0 ~ n_bins-1). 낮(일출~일몰)을 n_bins로 똑같이 나눈 것. 밤은 가까운 끝 구간
@@ -117,6 +118,7 @@ def build(site: dict, n_bins: int) -> dict:
         "t_sunset_s": round((sunset - start_min) * sec_per_min, 1),
         "bins": bins,
         "lmst_min": [round(v, 3) for v in lmst_min],
+        "ltst_h": [round(r["ltst_h"], 4) for r in rows],           # 지방 진태양시. 공개된 먼지 자료가 이 시각으로 적혀 있어서 맞출 때 쓴다
         "t_eva_s": [round((v - start_min) * sec_per_min, 1) for v in lmst_min],
         "elev_deg": [round(v, 3) for v in elev],
         "az_deg": [round(r["az_deg"], 3) for r in rows],

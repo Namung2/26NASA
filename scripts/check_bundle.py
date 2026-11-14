@@ -30,6 +30,7 @@ def make_node(root: str, tier: str, level: str, park: str, t_eva_s: float):
     b.dose_rate_uSv_h = hc.dose_rate_uSv_h(PARAMS)
     core = bt.Core.create(hc.load_config(TIERS, PARAMS, tier, b.meta))
     attached = b.attach(core, park)
+    core.log_merge(b.initial_events())                      # 선행 임무의 시료 결과(있으면)
     core.set_env(b.env_at(t_eva_s))
     core.costmap_build()
     return b, core, attached
@@ -84,9 +85,17 @@ def main() -> None:
             row.append(f"{label}: {bt.STATUS_NAME[p.status]:<7} 칸 {p.res_m:.0f} m, {m.length_m:5.0f} m, {m.time_min:5.1f}분, 최대 경사 {m.max_slope_deg:4.1f}°, "
                        f"로버가 안 보이는 시간 {m.comm_loss_min:5.1f}분, {ms:3.0f} ms")
             if label == "로버":
-                legs.append(p)
+                legs.append(core.path_polyline(p))          # 그릴 때는 꺾이는 점만 (계단 모양의 칸 경로를 직선 구간으로)
+                row.append(f"칸 {p.n} → 꺾이는 점 {len(legs[-1])}")
         print("  " + " | ".join(row))
         here = to
+
+    # 들를 지점과 순서 고르기 (S 항목): 3시간 안에 로버에서 나가 돌아오는 것 가운데 가치의 합이 가장 큰 것
+    rover.science_update(0.0)
+    cands_poi = [stop(pois[k], 20.0, "poi", i + 1) for i, k in enumerate(order)]
+    t0 = time.time()
+    picked = rover.select_pois(cands_poi, park, park, time_s=3 * 3600.0)
+    print(f"  지점 순서 고르기(3시간 한도): {['P' + str(s_.poi) for s_ in picked]}  ({1000 * (time.time() - t0):.0f} ms)")
 
     # ④ P2에 섰다. 출발 한계
     st.pos, st.t = bt.BtXY(*pois["P2"]), float(t_arrive)
@@ -136,9 +145,24 @@ def main() -> None:
         rng = f"({o.value_lo:.1f}~{o.value_hi:.1f})" if o.flags & bt.OPTF_FROM_HYPOTHESIS else ""
         print(f"  {'ABC'[o.label]} {names_ko[bt.LABEL_KEYS[o.label_key]]:<6} {o.time_min:3.0f}분, 최대 경사 {o.max_slope_deg:2.0f}°, 선량 {o.dose_uSv:4.1f} µSv, 가치 {o.value_mean:.1f} {rng} {bt.GRADES[o.value_grade]}, "
               f"정보 이득 {o.info_gain:.1f}, 로버가 안 보이는 시간 {o.comm_loss_min:.0f}분, 출발까지 {o.nlt_margin_min:.0f}분")
-        opt_paths.append((bt.LABEL_KEYS[o.label_key], rover.decision_path(d, i), o))
+        opt_paths.append((bt.LABEL_KEYS[o.label_key], rover.path_polyline(rover.decision_path(d, i)), o))
     d2 = rover.decide(st, plan, trig[0])
     print(f"  같은 입력으로 다시 → 다이제스트 같음: {d.digest == d2.digest}")
+
+    # 기상 리플레이: 시각을 5분씩 흘리며 환경을 넣어 본다 — 먼지가 임계를 넘는 순간과 그림자 구간이 바뀌는 순간에 환경 트리거가 난다
+    if rb.weather:
+        probe, _b2 = bt.Core.create(hc.load_config(TIERS, PARAMS, "rover", rb.meta)), None
+        fired, quiet = [], bt.BtTriggerIn()
+        for t in range(0, 8 * 3600 + 1, 300):
+            st2 = bt.BtState()
+            st2.t, st2.node = float(t), bt.NODE["suit-A"]
+            probe.set_env(rb.env_at(float(t)))
+            for tr in probe.triggers(st2, quiet):
+                w = rb.weather_at(float(t))
+                fired.append(f"{t // 3600} h {t % 3600 // 60:02d} m {bt.CAUSES[tr.cause_kind]}(tau {w['tau']:.2f})")
+        w0, w1 = rb.weather_at(0.0), rb.weather_at(st.t)
+        print(f"\n기상 리플레이 sol {meta['env'].get('sol')}: 출발 때 tau {w0['tau']:.2f}, P2에 섰을 때 {w1['tau']:.2f}" + (f", 기온 {w1['t_air_c']:.0f} °C" if w1['t_air_c'] is not None else "")
+              + f" · 경고 임계 {probe.cfg.dust_tau_warn:.3f}\n  환경 트리거: {', '.join(fired) if fired else '없음'}")
 
     # ⑦ 기기: "귀환" 버튼 → 귀환 카드 하나 (링크와 무관하게 기기가 직접 낸다)
     ur = bt.BtTrigger()
@@ -147,7 +171,7 @@ def main() -> None:
     print(f"기기의 귀환 카드: {dr.n_options}장, {dr.options[0].time_min:.0f}분, 출발까지 {dr.options[0].nlt_margin_min:.0f}분")
 
     if args.png:
-        draw(args.png, db, dp, legs, back, opt_paths, park, pois, view)
+        draw(args.png, db, dp, legs, dev.path_polyline(back), opt_paths, park, pois, view)
         print(f"\n그림: {args.png}")
 
 
@@ -194,14 +218,14 @@ def draw(png: str, db, passable, legs, back, opt_paths, park, pois, view) -> Non
 
     F, FB = font(18), font(28)
     px = lambda xy: [(x / res * S, -y / res * S) for x, y in xy]
-    for p in legs:
-        dr.line(px(p.xy()), fill=(255, 255, 255), width=3)
-    dr.line(px(back.xy()), fill=(255, 140, 40), width=4)
+    for pts in legs:
+        dr.line(px(pts), fill=(255, 255, 255), width=3)
+    dr.line(px(back), fill=(255, 140, 40), width=4)
     colors = {"continue_plan": (90, 230, 120), "hyp_target": (200, 120, 255), "stay": (120, 200, 255), "return_rover": (255, 140, 40),
               "drop_last": (240, 240, 120), "restore_plan": (240, 160, 200)}
     for key, p, _o in opt_paths:
-        if p.n > 1:
-            dr.line(px(p.xy()), fill=colors[key], width=4)
+        if len(p) > 1:
+            dr.line(px(p), fill=colors[key], width=4)
 
     def mark(xy, label, col):
         x, y = px([xy])[0]

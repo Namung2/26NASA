@@ -343,6 +343,26 @@ static void test_log() {
   CHECK(pp[20 * 64 + 20] == 0 && pp[20 * 64 + 22] == 0 && pp[20 * 64 + 23] == 1);
 }
 
+// 들를 지점과 순서 고르기
+static void test_select_pois() {
+  Mini m; Core k; CHECK(setup(k, m, 5.0f));
+  bt_stop pois[3], out[3]; uint32_t n = 0; std::memset(pois, 0, sizeof(pois));
+  const bt_xy start = cxy(5, 10, 5), end = cxy(5, 10, 5);
+  pois[0].xy = cxy(5, 10, 25); pois[1].xy = cxy(5, 10, 10); pois[2].xy = cxy(5, 10, 18);     // 서쪽에서 동쪽으로 1, 2, 0 순
+  for (int i = 0; i < 3; ++i) { pois[i].dwell_min = 5; pois[i].poi = static_cast<uint8_t>(i + 1); }
+  bt_budget b = budget();
+  CHECK(bt_select_pois(k.ctx, pois, 3, start, end, &b, out, &n) == BT_ERR_NOT_READY);
+  CHECK(bt_costmap_build(k.ctx, 5.0) == BT_OK);
+  CHECK(bt_select_pois(k.ctx, pois, 3, start, end, &b, out, &n) == BT_OK && n == 3);          // 시간 제한 없음 → 전부, 가장 짧은 순서
+  CHECK((out[0].poi == 2 && out[1].poi == 3 && out[2].poi == 1) || (out[0].poi == 1 && out[1].poi == 3 && out[2].poi == 2));
+  b.time_s = 12 * 60.0;                                                                       // 12분: 가까운 하나만 다녀올 수 있다
+  CHECK(bt_select_pois(k.ctx, pois, 3, start, end, &b, out, &n) == BT_OK && n == 1 && out[0].poi == 2);
+  b.time_s = 60.0;                                                                            // 1분: 아무 데도 못 간다
+  CHECK(bt_select_pois(k.ctx, pois, 3, start, end, &b, out, &n) == BT_OK && n == 0);
+  bt_stop many[9]; std::memset(many, 0, sizeof(many));
+  CHECK(bt_select_pois(k.ctx, many, 9, start, end, &b, many, &n) == BT_ERR_CAPACITY);
+}
+
 static void test_link() {
   bt_config cfg = make_cfg(8, 8, 5.0f, 5.0f);
   cfg.uhf.timeout_ms = 500; cfg.uhf.n_down = 5; cfg.uhf.n_up = 3; cfg.uhf.ewma_alpha = 0.3f; cfg.uhf.loss_down = 0.85f; cfg.uhf.rtt_down_ms = 400.0f;
@@ -662,6 +682,20 @@ static void test_decide() {
   }
   CHECK(n_hyp == 1 && d.n_options == 3);
 
+  // 그 가설 옵션을 고른 뒤(계획이 이미 가설 목표를 들른다): "가설 목표로"를 또 만들지 않는다. 닿을 수 없다는 알림도 없다
+  {
+    bt_option hopt; std::memset(&hopt, 0, sizeof(hopt));
+    for (uint32_t i = 0; i < d.n_options; ++i) if (d.options[i].label_key == BT_LABEL_HYP_TARGET) hopt = d.options[i];
+    bt_trigger_in in3; std::memset(&in3, 0, sizeof(in3)); in3.user_request = 0;
+    bt_trigger t3; std::memset(&t3, 0, sizeof(t3)); t3.kind = BT_TRIG_ENV; t3.cause_kind = BT_CAUSE_SHADOW;
+    bt_decision d3;
+    CHECK(bt_decide(k.ctx, &st, hopt.stops, hopt.n_stops, nullptr, 0, &t3, &d3) == BT_OK);
+    uint32_t again = 0;
+    for (uint32_t i = 0; i < d3.n_options; ++i) if (d3.options[i].label_key == BT_LABEL_HYP_TARGET) again++;
+    CHECK(again == 0 && (d3.notices & BT_NOTICE_HYP_UNREACHABLE) == 0);
+    CHECK(bt_decision_close(k.ctx, d3.seq) == BT_OK);
+  }
+
   // 철회 뒤: 되돌리기 옵션이 나란히 나온다 (prev_plan을 넘겼을 때만)
   bt_event wd = hyp_ev(st.pos, 3598.0, BT_RULE_STRATA_CONTINUITY, 180.0f, 100.0f, 0.5f, 2, false); wd.node = BT_NODE_SUIT_A; wd.lts = 3;
   wd.aux = BT_HYP_KEY(BT_NODE_SUIT_A, 1);
@@ -801,6 +835,22 @@ static void test_coarse_to_fine() {
   }
   CHECK(solved > 120);
 
+  // 꺾이는 점: 계단 모양이 직선으로 줄고, 직선 구간도 통과불가를 지나지 않는다
+  CHECK(bt_plan(k.ctx, cxy(5, 10, 5), cxy(5, 10, 60), &b, &p) == BT_OK);
+  {
+    std::vector<bt_xy> pts(p.len); uint32_t np2 = 0;
+    CHECK(bt_path_polyline(k.ctx, &p, pts.data(), p.len, &np2) == BT_OK && np2 >= 2 && np2 < p.len / 3);
+    CHECK(pts[0].x == cxy(5, 10, 5).x && pts[np2 - 1].x == cxy(5, 10, 60).x && pts[np2 - 1].y == cxy(5, 10, 60).y);
+    int hit = 0; double poly = 0.0;
+    for (uint32_t i = 1; i < np2; ++i) {
+      const double dx = pts[i].x - pts[i - 1].x, dy = pts[i].y - pts[i - 1].y, len = std::hypot(dx, dy);
+      poly += len;
+      for (int q = 0; q <= static_cast<int>(len); ++q) { const double t = len > 0 ? q / len : 0; if (m.blocked(static_cast<int>(-(pts[i - 1].y + dy * t) / 5), static_cast<int>((pts[i - 1].x + dx * t) / 5))) hit++; }
+    }
+    CHECK(hit == 0 && poly <= p.length_m + 1e-6 && poly > 0.9 * p.length_m);
+    bt_xy two[2]; CHECK(bt_path_polyline(k.ctx, &p, two, 1, &np2) == BT_ERR_CAPACITY);
+  }
+
   // 귀환 필드는 거친 격자, 결정 지점의 경로는 고운 격자
   Sci s;
   Core rv; bt_config rc = sci_cfg(BT_NODE_ROVER, BT_OPTMODE_PARETO); rc.coarse_first_grid_m = 10.0f; rc.corridor_m = 20.0f;
@@ -826,7 +876,7 @@ static void test_coarse_to_fine() {
 int main() {
   test_abi(); test_arena(); test_speed(); test_plan(); test_downsample(); test_field();
   test_apollo_walkback(); test_log(); test_link(); test_science(); test_decide();
-  test_window(); test_coarse_to_fine();
+  test_window(); test_coarse_to_fine(); test_select_pois();
   std::printf("selftest: %d checks, %d failed\n", g_checks, g_fail);
   return g_fail ? 1 : 0;
 }

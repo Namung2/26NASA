@@ -12,6 +12,11 @@ inline float rnd(double x, float prec) {            // 표시 정밀도로 맞�
 inline bool same_trigger(const bt_trigger& a, const bt_trigger& b) {
   return a.kind == b.kind && a.cause_kind == b.cause_kind && a.cause_lts == b.cause_lts && a.cause_node == b.cause_node;
 }
+inline bool near_m(bt_xy a, bt_xy b, double r) {
+  const double dx = a.x - b.x, dy = a.y - b.y;
+  return dx * dx + dy * dy <= r * r;
+}
+
 inline bool same_stops(const bt_stop* a, uint32_t na, const bt_stop* b, uint32_t nb) {
   if (na != nb) return false;
   for (uint32_t k = 0; k < na; ++k) {
@@ -512,6 +517,11 @@ bt_status bt_decide(bt_ctx* c, const bt_state* st, const bt_stop* plan, uint32_t
         bt_stop stops[BT_MAX_STOPS];
         std::memset(stops, 0, sizeof(stops));
         if (!hyp_target(c, k, scales[si], &stops[0].xy)) continue;
+        // 이미 그 목표에 와 있거나(관측 반경 안), 계획이 이미 그 목표를 들르면 "가설 목표로"를 따로 만들지 않는다.
+        // 만들면 "계획 유지"와 눈에 같은 선택지(같은 길, 같은 시간)가 하나 더 생긴다. 닿을 수 없어서 빠진 것이 아니므로 알림도 내지 않는다
+        bool covered = near_m(st->pos, stops[0].xy, static_cast<double>(cfg.r_obs_m));
+        for (uint32_t j = 0; j < n_plan && !covered; ++j) covered = near_m(plan[j].xy, stops[0].xy, static_cast<double>(cfg.r_obs_m));
+        if (covered) { made = true; break; }
         stops[0].purpose = BT_STOP_HYP_TARGET;
         stops[0].poi = BT_POI_NONE;
         const uint32_t keep_max = n_plan < BT_MAX_STOPS - 1 ? n_plan : BT_MAX_STOPS - 1;

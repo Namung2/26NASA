@@ -26,13 +26,14 @@
 from __future__ import annotations
 
 import ctypes as C
+import itertools
 import os
 import sys
 from pathlib import Path
 
 import numpy as np
 
-ABI_VERSION = 3      # core/include/btcore.h의 BT_ABI_VERSION과 같아야 한다
+ABI_VERSION = 4      # core/include/btcore.h의 BT_ABI_VERSION과 같아야 한다
 
 # ── 용량 상수 (헤더의 BT_MAX_*) ──────────────────────────────────────────
 MAX_OPTIONS, MAX_CANDIDATES, MAX_STOPS, MAX_REASONS, MAX_HYPS, MAX_NODES = 3, 8, 8, 4, 16, 8
@@ -69,6 +70,7 @@ LAYER = {"slope": 0, "elev": 1, "roughness": 2, "shadow": 3, "los": 4, "mu0": 5,
 WALK_PLAN, WALK_RETURN = 0, 1
 FIELD_ROVER_RETURN = 0
 CH_UHF, CH_WIFI = 0, 1
+CHS_UP, CHS_DOWN = 0, 1          # bt_channel.state
 NET_SENT, NET_ACK, NET_SEND_ERROR, NET_TICK = range(4)
 OPTMODE_RECEIVE, OPTMODE_PARETO = 0, 1
 
@@ -302,6 +304,8 @@ def load() -> C.CDLL:
         "bt_return_path": (C.c_int, [vp, C.c_int, BtXY, P(BtPath)]),
         "bt_path_measure": (C.c_int, [vp, P(BtPath), P(BtState), C.c_int, P(BtPathMetrics)]),
         "bt_alternatives": (C.c_int, [vp, BtXY, BtXY, P(BtBudget), P(BtPath), u32, P(u32)]),
+        "bt_path_polyline": (C.c_int, [vp, P(BtPath), P(BtXY), u32, P(u32)]),
+        "bt_select_pois": (C.c_int, [vp, P(BtStop), u32, BtXY, BtXY, P(BtBudget), P(BtStop), P(u32)]),
         "bt_log_append": (C.c_int, [vp, P(BtEvent)]),
         "bt_log_merge": (C.c_int, [vp, P(BtEvent), u32, P(u32)]),
         "bt_log_since": (C.c_int, [vp, P(u32), P(BtEvent), u32, P(u32)]),
@@ -465,6 +469,40 @@ class Core:
         p = Path_(self._path_cap)
         p.status = self._check("bt_return_path", self.lib.bt_return_path(self.ctx, FIELD_ROVER_RETURN, _xy(start), C.byref(p.c)), ok=(OK, ERR_UNREACHABLE))
         return p
+
+    def path_polyline(self, path: Path_, via: list | None = None) -> np.ndarray:
+        """경로의 꺾이는 점만 [n, 2]. 계단 모양의 칸 경로를 직선 구간으로 줄인 것 — 화면에 그릴 때와 UHF로 보낼 때 쓴다.
+
+        via: 경로가 도중에 들르는 정지점의 좌표(마지막 정지점은 빼고). 주면 그 자리에서 경로를 끊어 구간마다 따로 줄인다.
+        끊지 않으면 직선으로 줄이는 과정에서 들르는 지점을 건너뛴 선이 나올 수 있다(지점을 스치지 않고 다음 지점으로 곧장 가는 선).
+        """
+        cuts = [0]
+        if via and path.n > 2:
+            xy = path.xy()
+            for v in via:                                    # 들르는 순서대로, 앞에서 끊은 자리 뒤에서 가장 가까운 칸을 찾는다
+                rest = xy[cuts[-1]:]
+                k = cuts[-1] + int(np.argmin((rest[:, 0] - float(v[0])) ** 2 + (rest[:, 1] - float(v[1])) ** 2))
+                if cuts[-1] < k < path.n - 1:
+                    cuts.append(k)
+        cuts.append(path.n - 1)
+        pts: list[tuple[float, float]] = []
+        for a, b in itertools.pairwise(cuts):
+            sub = BtPath.from_buffer_copy(path.c)            # 같은 칸 배열의 한 구간을 가리키는 경로
+            sub.cells = C.cast(C.addressof(path.buf) + a * C.sizeof(BtCell), C.POINTER(BtCell))
+            sub.len = max(0, b - a + 1) if path.n else 0
+            out, n = (BtXY * max(2, sub.len))(), u32()
+            self._check("bt_path_polyline", self.lib.bt_path_polyline(self.ctx, C.byref(sub), out, len(out), C.byref(n)))
+            seg = [(out[i].x, out[i].y) for i in range(n.value)]
+            pts += seg[1:] if pts and seg and seg[0] == pts[-1] else seg
+        return np.array(pts, dtype=np.float64).reshape(-1, 2)
+
+    def select_pois(self, pois: list[BtStop], start, end, time_s: float = 0.0) -> list[BtStop]:
+        """들를 지점과 순서를 고른다(시간 안에서 과학 가치의 합이 가장 큰 것). time_s ≤ 0이면 전부, 가장 짧은 순서."""
+        b = BtBudget()
+        b.time_s = time_s
+        arr, out, n = (BtStop * max(1, len(pois)))(*pois), (BtStop * max(1, len(pois)))(), u32()
+        self._check("bt_select_pois", self.lib.bt_select_pois(self.ctx, arr, len(pois), _xy(start), _xy(end), C.byref(b), out, C.byref(n)))
+        return [BtStop.from_buffer_copy(out[i]) for i in range(n.value)]
 
     def path_measure(self, path: Path_, state: BtState, mode: int = WALK_PLAN) -> BtPathMetrics:
         """경로의 걷는 시간·최대 경사·선량·통신 두절 시간·길이."""
