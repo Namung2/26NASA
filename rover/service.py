@@ -121,7 +121,10 @@ class RoverService:
                 self._queued = []
         elif msg.type == "telemetry":
             self.crew = msg.state
-            self._track_visits()
+            if self._track_visits():
+                # 지점에 닿아 계획이 나아갔다. 아직 고르지 않은 결정 지점의 선택지는 닿기 전의 계획으로 만든 것이라 낡았다
+                # (기기도 그 카드를 내린다 — device/node.py) → 지금 상태로 다시 계산해 보낸다
+                self._resend = self._resend or self.open_trigger is not None
             if self._resend:
                 # 사람이 아직 고르지 않은 결정 지점은 "지금" 상태로 다시 계산해 한 번 더 보낸다 (기기는 끊김이 오래가면 카드를 내린다).
                 # 하트비트가 아니라 텔레메트리에서 하는 이유: 끊기기 전의 위치·시각으로 계산한 카드를 보내지 않기 위해서다.
@@ -191,10 +194,16 @@ class RoverService:
                 return left or None
         return None
 
-    def _track_visits(self) -> None:
-        while self.crew is not None and self.plan and math.dist(self.crew.pos, self.plan[0].xy) <= self.arrive_m:
+    def _track_visits(self) -> bool:
+        """우주인이 닿은 지점을 계획에서 뺀다. 하나라도 뺐으면 True."""
+        moved = False
+        # 텔레메트리의 위치는 0.1 m로 반올림돼 온다 → 기기(참 위치로 판정)가 닿았다고 본 것을 로버가 놓치지 않게 그만큼 여유를 둔다.
+        # 놓치면 로버의 계획에 지난 지점이 남아, 이후의 카드가 그 지점을 다시 들르는 선택지를 낸다
+        while self.crew is not None and self.plan and math.dist(self.crew.pos, self.plan[0].xy) <= self.arrive_m + 0.2:
             self.visited.append(self.plan.pop(0).xy)
             self._route_key = None
+            moved = True
+        return moved
 
     # ── 결정 지점 ──
     def _bt_state(self) -> bt.BtState:

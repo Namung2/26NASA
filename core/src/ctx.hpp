@@ -97,6 +97,7 @@ struct Decide {
   bt_cell* pool; uint32_t pool_cap, pool_len;   // 후보 경로의 칸
   bt_cell* alt; uint32_t alt_per;               // 갈림길 검사용 (경로 3개)
   uint8_t env_seen, prev_bin; double prev_tau;
+  uint8_t dust_above, dust_fired; double dust_since;   // 먼지: 지금 임계 위인가, 이번에 넘은 것으로 이미 물었는가, 넘기 시작한 시각
   uint8_t route_seen; bt_xy route_stop;
 };
 
@@ -149,6 +150,7 @@ void fill_rect(const bt_ctx* c, uint32_t f, int32_t R0, int32_t C0, uint32_t H, 
 // planner.cpp
 bt_status plan_ex(bt_ctx* c, bt_xy start, bt_xy goal, const bt_budget* b, bt_path* out, bool refine);
 bt_status alternatives_ex(bt_ctx* c, bt_xy start, bt_xy goal, const bt_budget* b, bt_path* out, uint32_t cap, uint32_t* n, bool refine);
+bool path_reaches(const bt_ctx* c, const bt_path* p, bt_xy goal);
 bool cell_info(const bt_ctx* c, double res_m, bt_cell a, float* elev, float* slope, uint8_t* los, bt_xy* xy);
 double step_seconds(const bt_ctx* c, float e_from, float e_to, double dist_m, int mode);
 bool cells_cost(const bt_ctx* c, const bt_cell* cells, uint32_t len, int profile, double* cost, double* length);

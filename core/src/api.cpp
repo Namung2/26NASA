@@ -6,7 +6,7 @@ using namespace bt;
 static_assert(sizeof(bt_event) == 64, "bt_event는 64 B");
 static_assert(sizeof(bt_grid_geom) == 32, "bt_grid_geom 안에 빈 자리가 없어야 한다");
 static_assert(sizeof(bt_link_cfg) == 20, "bt_link_cfg 안에 빈 자리가 없어야 한다");
-static_assert(sizeof(bt_config) == 376, "bt_config 안에 빈 자리가 없어야 한다 (통째로 해시한다)");
+static_assert(sizeof(bt_config) == 384, "bt_config 안에 빈 자리가 없어야 한다 (통째로 해시한다)");
 
 uint32_t bt_abi_version(void) { return BT_ABI_VERSION; }
 

@@ -29,7 +29,7 @@ extern "C" {
 #  define BT_API
 #endif
 
-#define BT_ABI_VERSION 4u
+#define BT_ABI_VERSION 5u
 
 /* ── 용량 상수 ─────────────────────────────────────────────────────────── */
 #define BT_MAX_OPTIONS     3
@@ -220,7 +220,9 @@ typedef struct {
   /* 안전 */
   float k_return, nlt_warn_min, nlt_force_min, sunset_margin_min, sunset_warn_min, eva_max_h,
         dose_warn_uSv,           /* 없으면 0 */
-        dust_tau_warn;
+        dust_tau_warn,
+        dust_hold_s,             /* 먼지가 임계 위에 이만큼 이어져야 "넘었다"고 본다(결정 지점). 0이면 넘는 순간. 화면의 경고 표시는 기다리지 않는다 */
+        _pad_env;                /* 0 (자리 맞춤 — bt_config는 통째로 해시하므로 빈 자리를 두지 않는다) */
 
   /* 연결 */
   bt_link_cfg uhf, wifi;

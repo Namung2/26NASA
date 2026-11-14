@@ -83,6 +83,7 @@ science:
 
 env:
   dust_tau_warn:    {value: 0.414, status: DESIGN, source: "먼지 광학 두께(9 µm 적외선 값) 경고. Jezero의 실측 기록(Smith 2022, sol 15~400, 5분 간격 56,368점) 가운데 95 %가 이 값 아래다 — 번들을 만들 때 다시 계산해 메타의 env.tau_p95_record에 적는다. 95 %라는 기준은 우리 선택. 가시광 tau의 임계가 아니다(REFERENCE §6.2)"}
+  dust_hold_s:      {value: 300, unit: s, status: DESIGN, source: "먼지가 임계 위에 이만큼 이어져야 넘은 것으로 보고 결정 지점을 낸다. 기록의 측정 간격(Smith 2022, 중앙값 4.99분) — 측정 한 번의 흔들림으로는 묻지 않고, 잇단 두 측정이 모두 임계 위일 때 묻는다. 화면의 경고 표시는 기다리지 않는다"}
 
 safety:
   dose_warn_uSv:     {value: null, unit: uSv, status: TBD, source: "출처 있는 값을 찾기 전에는 비워 둔다 — 비어 있으면 선량은 표시만 한다"}

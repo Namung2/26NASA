@@ -94,6 +94,7 @@ def load_config(tiers_path: str, params_path: str, tier: str, meta: dict, node: 
         setattr(c, key, _v(sf[key]))
     c.eva_max_h = _v(p["suit"]["eva_max_h"])
     c.dust_tau_warn = _v(p["env"]["dust_tau_warn"])
+    c.dust_hold_s = _v(p["env"]["dust_hold_s"])
 
     # 연결
     ln = p["link"]

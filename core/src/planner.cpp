@@ -145,7 +145,7 @@ bool clip_to_window(const bt_ctx* c, const MapView& v, int32_t gr, int32_t gc, i
 
 // 한 ε에 대한 A*. 목표를 꺼내면 true. 예산이 바닥나거나 힙이 비면 false (*exhausted로 구분)
 bool astar_round(bt_ctx* c, const MapView& v, int32_t sr, int32_t sc, int32_t gr, int32_t gc, double eps, int profile,
-                 double time_cap, uint32_t max_exp, uint32_t* expansions, bool* exhausted, bool* overflow) {
+                 double time_cap, uint32_t max_exp, uint32_t* expansions, bool* exhausted, bool* overflow, uint32_t* near_idx) {
   Search& s = c->s;
   const float* base = v.base[profile];
   const double w_s = static_cast<double>(c->cfg.profiles[profile].w_s);
@@ -155,6 +155,8 @@ bool astar_round(bt_ctx* c, const MapView& v, int32_t sr, int32_t sc, int32_t gr
   const uint32_t s_idx = wi(s, sr, sc), g_idx = wi(s, gr, gc);
   *exhausted = false;
   *overflow = false;
+  *near_idx = s_idx;                               // 펼친 칸 가운데 목표에 가장 가까운 것(어림 거리 h가 가장 작은 것). 예산이 다하면 여기까지의 길을 낸다
+  float near_h = 3.0e38f;
 
   next_stamp(c);
   touch(s, s_idx);
@@ -170,6 +172,7 @@ bool astar_round(bt_ctx* c, const MapView& v, int32_t sr, int32_t sc, int32_t gr
     const uint32_t i = top.idx;
     s.flag[i] = static_cast<uint8_t>((s.flag[i] & FL_DIR) | FL_CLOSED);
     if (i == g_idx) return true;
+    if (top.h < near_h) { near_h = top.h; *near_idx = i; }       // 동률이면 먼저 펼친 칸 (순서는 힙의 동률 규칙으로 고정돼 있다)
     *expansions += 1;
     const int32_t r = s.wr0 + static_cast<int32_t>(i / s.ww), col = s.wc0 + static_cast<int32_t>(i % s.ww);
     const uint32_t mi = vi(v, r, col);
@@ -226,7 +229,7 @@ bt_status write_cells(const bt_ctx* c, double res, int32_t sr, int32_t sc, int32
   return BT_OK;
 }
 
-struct Sol { uint32_t len; double length, cost; float eps_bound; uint8_t complete; };
+struct Sol { uint32_t len; double length, cost; float eps_bound; uint8_t complete; uint8_t reached; };   // reached = 0: 목표에 닿지 못한 길(예산 소진)
 
 // 지금 놓인 창 안에서 ε 스케줄대로 푼다. 시작·목표는 창 안의 통과 가능 칸이어야 한다
 bt_status solve(bt_ctx* c, const MapView& v, int32_t sr, int32_t sc, int32_t gr, int32_t gc, int profile, double time_cap,
@@ -235,15 +238,26 @@ bt_status solve(bt_ctx* c, const MapView& v, int32_t sr, int32_t sc, int32_t gr,
   bool found = false;
   double best = D_INF;
   float last_eps = 0.0f;
-  out->len = 0; out->length = 0.0; out->cost = 0.0; out->eps_bound = 0.0f; out->complete = 0;
+  out->len = 0; out->length = 0.0; out->cost = 0.0; out->eps_bound = 0.0f; out->complete = 0; out->reached = 1;
   const uint32_t g_idx = wi(c->s, gr, gc);
   for (uint32_t k = 0; k < eps_n; ++k) {          // 큰 ε → 빠른 첫 해, 이후 개선
     const double e = eps[k] >= 1.0f ? static_cast<double>(eps[k]) : 1.0;
     bool exhausted = false, overflow = false;
-    const bool ok = astar_round(c, v, sr, sc, gr, gc, e, profile, time_cap, max_exp, expansions, &exhausted, &overflow);
+    uint32_t near_idx = 0;
+    const bool ok = astar_round(c, v, sr, sc, gr, gc, e, profile, time_cap, max_exp, expansions, &exhausted, &overflow, &near_idx);
     if (overflow) return BT_ERR_CAPACITY;
     if (!ok) {
       if (!exhausted && !found) return BT_ERR_UNREACHABLE;       // 길이 없다
+      if (!found) {
+        // 예산 안에 목표에 닿지 못했다 → 목표에 가장 가까이 간 칸까지의 길을 낸다(BT_PARTIAL, 헤더의 약속).
+        // "길 없음"과 다르다: 길이 있는지 없는지 아직 모른다. 부르는 쪽은 끝 칸이 목표인지 보고 쓴다(path_reaches)
+        const int32_t nr = c->s.wr0 + static_cast<int32_t>(near_idx / c->s.ww), nc = c->s.wc0 + static_cast<int32_t>(near_idx % c->s.ww);
+        const bt_status st = write_cells(c, v.res, sr, sc, nr, nc, cells, cap, &out->len, &out->length);
+        if (st != BT_OK) return st;
+        out->cost = c->s.g[near_idx];
+        out->reached = 0;
+        return BT_PARTIAL;
+      }
       break;
     }
     if (!found || c->s.g[g_idx] < best) {
@@ -345,6 +359,7 @@ bt_status refine(bt_ctx* c, bt_xy start, bt_xy goal, bool clipped, const bt_cell
     Sol sol;
     const bt_status st = solve(c, tv, sr, sc, gr, gc, profile, time_cap, &one, 1, max_exp, expansions, out->cells + at, out->cap - at, &sol);
     if (st < 0) return st;
+    if (!sol.reached) return BT_ERR_UNREACHABLE;      // 조각 안에서 예산이 다했다 → 부른 쪽이 거친 경로로 물러난다
     len = at + sol.len;
     cost += sol.cost;
     length += sol.length;
@@ -398,6 +413,7 @@ bt_status plan_ex(bt_ctx* c, bt_xy start, bt_xy goal, const bt_budget* b, bt_pat
   out->expansions = expansions;
   if (st < 0) return st;
 
+  if (!sol.reached) clipped = true;                 // 목표에 닿지 못한 길: 끝 칸을 목표로 삼아 다듬고, 끝까지 풀지 못한 것으로 적는다
   if (c2f) {
     const bt_status rs = refine(c, start, goal, clipped, c->tile.coarse, sol.len, b->profile, b->time_s, max_exp, &expansions, out);
     out->expansions = expansions;
@@ -418,6 +434,16 @@ bt_status plan_ex(bt_ctx* c, bt_xy start, bt_xy goal, const bt_budget* b, bt_pat
   return out->complete ? BT_OK : BT_PARTIAL;
 }
 
+// 경로의 끝 칸이 목표(가까운 통과 가능 칸으로 옮긴 것 포함)인가. BT_PARTIAL은 목표에 닿지 못한 길일 수 있다
+// (예산 소진, 재계획 반경 밖의 목표) — 정지점까지 가야 하는 쪽은 이것으로 확인하고 쓴다
+bool path_reaches(const bt_ctx* c, const bt_path* p, bt_xy goal) {
+  if (!p || !p->cells || p->len == 0) return false;
+  const Geom pg{c->cfg.cost_grid.origin.x, c->cfg.cost_grid.origin.y, p->res_m, 0, 0};
+  const bt_xy e = cell_center(pg, p->cells[p->len - 1].row, p->cells[p->len - 1].col);
+  const double dx = e.x - goal.x, dy = e.y - goal.y, lim = p->snapped_m + 1.5 * p->res_m;
+  return dx * dx + dy * dy <= lim * lim;
+}
+
 bt_status alternatives_ex(bt_ctx* c, bt_xy start, bt_xy goal, const bt_budget* b, bt_path* out, uint32_t cap, uint32_t* n, bool allow_refine) {
   if (!c || !b || !out || !n) return BT_ERR_ARG;
   *n = 0;
@@ -430,7 +456,7 @@ bt_status alternatives_ex(bt_ctx* c, bt_xy start, bt_xy goal, const bt_budget* b
     bt_path* cand = &out[*n];
     const bt_status st = plan_ex(c, start, goal, &bb, cand, allow_refine);
     if (st == BT_ERR_ARG || st == BT_ERR_NOT_READY || st == BT_ERR_CAPACITY) return st;
-    if (st < 0) continue;
+    if (st < 0 || !path_reaches(c, cand, goal)) continue;
     // 이미 고른 경로와 많이 겹치면 같은 경로로 본다. 겹침은 전역 격자의 칸으로 센다
     int32_t r0, c0;
     if (xy_to_cell(g, start, &r0, &c0)) center_window(c, v, r0, c0);

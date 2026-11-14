@@ -52,7 +52,7 @@ bt_status bt_select_pois(bt_ctx* c, const bt_stop* pois, uint32_t n, bt_xy start
       p.cap = c->dec.alt_per * BT_MAX_PROFILES;
       const bt_status st = plan_ex(c, node[i], node[j], &leg, &p, true);
       if (st == BT_ERR_CAPACITY) return st;
-      if (st < 0) continue;                          // 길이 없다
+      if (st < 0 || !path_reaches(c, &p, node[j])) continue;   // 길이 없거나 그 지점까지 닿지 못했다
       bt_path_metrics m;
       if (bt_path_measure(c, &p, &dummy, BT_WALK_PLAN, &m) != BT_OK) continue;
       T[i][j] = static_cast<double>(m.time_min) * 60.0;

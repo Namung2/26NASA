@@ -136,6 +136,11 @@ class DeviceNode:
         while self.plan and math.dist(f.pos, self.plan[0].xy) <= self.arrive_m:
             self.plan.pop(0)
             self._route_key = None
+            # 지점에 닿아 계획이 한 칸 나아갔다 → 떠 있던 로버의 카드는 "닿기 전의 계획"으로 계산한 것이라 낡았다.
+            # 그대로 두면 그 카드의 "계획 유지"가 방금 지난 지점을 다시 들르는 계획이 된다(되돌아가게 된다) → 내린다.
+            # 연결돼 있으면 로버가 지금 상태로 다시 계산한 카드를 곧 보낸다(rover/service.py). 기기가 직접 낸 귀환 카드는 그대로 둔다
+            if self.dp is not None and self.dp_source != "local":
+                self.dp = None
 
         # 안전 감시와 귀환 카드 — 링크와 무관하게 기기가 직접 한다
         nlt_view, nlt_warn, back = None, False, []

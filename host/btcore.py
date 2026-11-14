@@ -33,7 +33,7 @@ from pathlib import Path
 
 import numpy as np
 
-ABI_VERSION = 4      # core/include/btcore.h의 BT_ABI_VERSION과 같아야 한다
+ABI_VERSION = 5      # core/include/btcore.h의 BT_ABI_VERSION과 같아야 한다
 
 # ── 용량 상수 (헤더의 BT_MAX_*) ──────────────────────────────────────────
 MAX_OPTIONS, MAX_CANDIDATES, MAX_STOPS, MAX_REASONS, MAX_HYPS, MAX_NODES = 3, 8, 8, 4, 16, 8
@@ -148,7 +148,7 @@ class BtConfig(C.Structure):
         ("prec_time_min", f32), ("prec_max_slope_deg", f32), ("prec_dose_uSv", f32), ("prec_value", f32), ("prec_value_var", f32),
         ("prec_info_gain", f32), ("prec_nlt_margin_min", f32), ("prec_comm_loss_min", f32),
         ("k_return", f32), ("nlt_warn_min", f32), ("nlt_force_min", f32), ("sunset_margin_min", f32), ("sunset_warn_min", f32),
-        ("eva_max_h", f32), ("dose_warn_uSv", f32), ("dust_tau_warn", f32),
+        ("eva_max_h", f32), ("dose_warn_uSv", f32), ("dust_tau_warn", f32), ("dust_hold_s", f32), ("_pad_env", f32),
         ("uhf", BtLinkCfg), ("wifi", BtLinkCfg), ("lost_dp_s", f32), ("hb_hz", f32),
     ]
 

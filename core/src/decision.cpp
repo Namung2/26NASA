@@ -55,6 +55,7 @@ bool build_route_ex(bt_ctx* c, bt_xy start, const bt_stop* stops, uint32_t n, ui
     leg.cells = D.pool + at;
     leg.cap = D.pool_cap - at;
     if (plan_ex(c, cur, stops[k].xy, &bud, &leg, refine) < 0) return false;
+    if (!path_reaches(c, &leg, stops[k].xy)) return false;   // 정지점에 닿지 못한 길(예산 소진, 반경 밖)로는 옵션을 만들지 않는다
     if (k == 0) {
       res = leg.res_m;
     } else if (std::fabs(leg.res_m - res) > 1e-9) {
@@ -226,8 +227,11 @@ bool add_candidate(bt_ctx* c, const bt_state* st, uint8_t kind, uint8_t label_ke
   return true;
 }
 
-// 가설의 목표: 닻에서 direction 방향 extent·scale 거리 근처에서 delta가 가장 큰 통과 가능 칸
-bool hyp_target(const bt_ctx* c, uint32_t k, double scale, bt_xy* out) {
+// 가설의 목표: 닻에서 direction 방향 extent·scale 거리 근처에서 delta가 가장 큰 통과 가능 칸.
+// 그 가설을 넣은 뒤에 관측한 자리의 관측 반경(r_obs) 안은 목표로 삼지 않는다 — 거기는 이미 본 곳이다(2026-11-14 결정:
+// "가설 목표는 거기서 관측을 남겨야 끝난다". 다녀오기만 하고 관측을 남기지 않았으면 다시 나온다 — 로그에 본 기록이 없기 때문이다).
+// examined: 값이 오르는 칸이 있었지만 전부 이미 관측한 자리여서 목표가 없을 때 true
+bool hyp_target(const bt_ctx* c, uint32_t k, double scale, bt_xy* out, bool* examined) {
   const Science& s = c->sci;
   const Hyp& h = s.hyp[k];
   const double L = static_cast<double>(h.extent_m) * scale;
@@ -239,6 +243,22 @@ bool hyp_target(const bt_ctx* c, uint32_t k, double scale, bt_xy* out) {
     center.y += std::cos(th) * L;
     radius = static_cast<double>(c->cfg.hyp_snap_m);
   }
+  *examined = false;
+
+  // 이 가설보다 뒤에 들어온 관측 가운데 찾는 범위에 걸치는 것 (가설보다 앞선 관측은 "그 가설을 보러 간 것"이 아니다 — 확신 갱신과 같은 기준)
+  constexpr uint32_t SEEN_MAX = 128;                 // 상한. 넘치면 뒤의 관측은 보지 않는다(그 자리가 다시 목표가 될 수 있다)
+  bt_xy seen[SEEN_MAX];
+  uint32_t n_seen = 0;
+  const double r_obs = static_cast<double>(c->cfg.r_obs_m);
+  for (uint32_t e = 0; e < c->log_n && n_seen < SEEN_MAX; ++e) {
+    const bt_event& ev = c->log[e];
+    if (ev.type != BT_EV_OBS || !(ev.lts > h.lts)) continue;
+    const double dx = ev.x - center.x, dy = ev.y - center.y, reach = radius + r_obs + s.g.res;
+    if (dx * dx + dy * dy > reach * reach) continue;
+    seen[n_seen].x = ev.x; seen[n_seen].y = ev.y;
+    n_seen += 1;
+  }
+
   const Geom cg = cm_geom(c);
   const int32_t c0 = static_cast<int32_t>(std::floor((center.x - radius - s.g.ox) / s.g.res));
   const int32_t c1 = static_cast<int32_t>(std::floor((center.x + radius - s.g.ox) / s.g.res));
@@ -254,6 +274,9 @@ bool hyp_target(const bt_ctx* c, uint32_t k, double scale, bt_xy* out) {
       int32_t pr, pc;
       if (!xy_to_cell(cg, q, &pr, &pc)) continue;
       if (!c->cm.passable[static_cast<uint32_t>(pr) * c->cm.w + static_cast<uint32_t>(pc)]) continue;
+      bool already = false;
+      for (uint32_t e = 0; e < n_seen && !already; ++e) already = near_m(q, seen[e], r_obs);
+      if (already) { *examined = true; continue; }   // 이미 관측한 자리
       best = d; *out = q; found = true;
     }
   }
@@ -430,15 +453,26 @@ bt_status bt_triggers(bt_ctx* c, const bt_state* now, const bt_state* prev, cons
   std::memset(t, 0, sizeof(t));
 
   bool safety = false;
+  bool new_leg_fork = false;                          // 이번에 낸 경로 갈림길이 "새 구간"의 것인가 (아래의 다시-내지-않기 규칙에서 뺀다)
   for (uint32_t i = 0; i < in->n_safety; ++i) if (in->safety[i].kind == BT_TRIG_SAFETY) safety = true;
 
   // 환경의 직전 값은 컨텍스트가 기억한다
   bool dust = false, shadow = false;
   if (c->env_set) {
     if (D.env_seen) {
-      dust = c->cfg.dust_tau_warn > 0 && D.prev_tau <= static_cast<double>(c->cfg.dust_tau_warn) &&
-             c->env.tau_dust > static_cast<double>(c->cfg.dust_tau_warn);
+      // 먼지: 임계를 넘은 채로 dust_hold_s가 지나야 "넘었다"고 보고 한 번 묻는다. 임계 근처에서 잠깐 넘었다 내려오는 것
+      // (측정 한 번의 흔들림)으로는 묻지 않는다. 한 번 물은 뒤에는 임계 아래로 내려갔다 다시 넘어야 또 묻는다.
+      const double warn = static_cast<double>(c->cfg.dust_tau_warn);
+      if (warn > 0 && c->env.tau_dust > warn) {
+        if (!D.dust_above) { D.dust_above = 1; D.dust_fired = 0; D.dust_since = now->t; }
+        if (!D.dust_fired && now->t - D.dust_since >= static_cast<double>(c->cfg.dust_hold_s)) { dust = true; D.dust_fired = 1; }
+      } else {
+        D.dust_above = 0;
+      }
       shadow = c->env.shadow_bin != D.prev_bin;
+    }
+    if (!D.env_seen && c->cfg.dust_tau_warn > 0 && c->env.tau_dust > static_cast<double>(c->cfg.dust_tau_warn)) {
+      D.dust_above = 1; D.dust_fired = 1;             // 처음부터 임계 위였다: 바뀐 것이 아니므로 묻지 않는다(화면의 경고 표시는 떠 있다)
     }
     D.env_seen = 1; D.prev_tau = c->env.tau_dust; D.prev_bin = c->env.shadow_bin;
   }
@@ -485,6 +519,7 @@ bt_status bt_triggers(bt_ctx* c, const bt_state* now, const bt_state* prev, cons
             if (!cells_cost(c, alt[a].cells, alt[a].len, 0, &ca, &la)) continue;
             if (std::fabs(ca - c0) / c0 < static_cast<double>(c->cfg.eps_fork)) {     // 서로 다른 경로의 비용이 비슷하다
               t[k].kind = BT_TRIG_FORK; t[k].cause_kind = BT_CAUSE_ROUTE; k += 1;
+              new_leg_fork = true;
               break;
             }
           }
@@ -497,7 +532,10 @@ bt_status bt_triggers(bt_ctx* c, const bt_state* now, const bt_state* prev, cons
   uint32_t m = 0;
   for (uint32_t i = 0; i < k; ++i) {
     bool skip = false;
-    if (t[i].kind != BT_TRIG_LINK_LOST) {
+    // 새 구간의 경로 갈림길은 앞 구간의 것과 원인 표시(종류·원인)가 같아도 다른 물음이다. 구간마다 한 번만 보므로(route_seen)
+    // 여기서 걸러 버리면 그 구간의 갈림길은 다시 나오지 않는다 → 열려 있는 앞 구간의 카드나 cooldown에 막히지 않게 한다
+    const bool fresh = new_leg_fork && t[i].kind == BT_TRIG_FORK && t[i].cause_kind == BT_CAUSE_ROUTE;
+    if (t[i].kind != BT_TRIG_LINK_LOST && !fresh) {
       if (D.open && same_trigger(D.open_trig, t[i])) skip = true;
       const uint32_t nc = D.cool_n < COOL_N ? D.cool_n : COOL_N;
       for (uint32_t j = 0; j < nc && !skip; ++j) {
@@ -546,12 +584,15 @@ bt_status bt_decide(bt_ctx* c, const bt_state* st, const bt_stop* plan, uint32_t
     const uint32_t nh = c->sci.n_hyps;
     bool hyp_late = false, hyp_flat = false;                                // 가설 옵션이 못 나온 까닭: 출발 한계 / 지도에 더한 것이 없음
     for (uint32_t k = nh > room ? nh - room : 0; k < nh; ++k) {             // 넘치면 최신 가설만
-      bool made = false, has_target = false;
+      bool made = false, has_target = false, examined = false;
       const double scales[3] = {1.0, 0.5, 0.25};                            // 출발 한계에 안 맞으면 범위를 줄여 본다
       for (int si = 0; si < 3 && !made; ++si) {
         bt_stop stops[BT_MAX_STOPS];
         std::memset(stops, 0, sizeof(stops));
-        if (!hyp_target(c, k, scales[si], &stops[0].xy)) continue;
+        bool ex = false;
+        const bool got = hyp_target(c, k, scales[si], &stops[0].xy, &ex);
+        if (ex) examined = true;
+        if (!got) continue;
         has_target = true;
         // 이미 그 목표에 와 있거나(관측 반경 안), 계획이 이미 그 목표를 들르면 "가설 목표로"를 따로 만들지 않는다.
         // 만들면 "계획 유지"와 눈에 같은 선택지(같은 길, 같은 시간)가 하나 더 생긴다. 닿을 수 없어서 빠진 것이 아니므로 알림도 내지 않는다
@@ -567,7 +608,8 @@ bt_status bt_decide(bt_ctx* c, const bt_state* st, const bt_stop* plan, uint32_t
         }
       }
       // 까닭을 가려서 알린다: 목표는 있는데 출발 한계에 안 맞는 것과, 가설이 그 방향의 값을 올리지 않아 목표 자체가 없는 것은 다르다
-      if (!made) { if (has_target) hyp_late = true; else hyp_flat = true; }
+      // 목표가 될 자리를 이미 다 관측했으면 알릴 것이 없다 — 그 가설은 본 것이다
+      if (!made) { if (has_target) hyp_late = true; else if (!examined) hyp_flat = true; }
     }
     if (hyp_late) out->notices = static_cast<uint16_t>(out->notices | BT_NOTICE_HYP_UNREACHABLE);
     if (hyp_flat) out->notices = static_cast<uint16_t>(out->notices | BT_NOTICE_HYP_NO_EFFECT);
