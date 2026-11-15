@@ -1,0 +1,32 @@
+# 내려받을 수 있는 번들의 목록. scripts/make_release.py가 만든다 — 손으로 고치지 않는다.
+# 읽는 곳: host/fetch.py (번들이 이 기계에 없으면 저장소의 release/ 폴더에 있는 zip을 풀고, 그것도 없으면 여기 적힌 곳에서 받는다.
+#          어느 쪽이든 크기와 SHA-256을 확인한 뒤에 푼다)
+release: https://raw.githubusercontent.com/Namung2/26NASA/main/release
+bundles:
+  jezero_floor_v1:
+    file: bundle_jezero_floor_v1.zip
+    bytes: 60517330
+    sha256: a55cc87d852252323a9e67dc45896f9b7f608f1a2500c1d1950798dac4745eab
+    site: jezero_floor
+    extent_m:
+    - 5000.0
+    - 5000.0
+    pois: 3
+  jezero_inlet_v1:
+    file: bundle_jezero_inlet_v1.zip
+    bytes: 67488686
+    sha256: 885b25a9b402ae6e511e48463335681179f98599f5a631f1bd93834822e6b255
+    site: jezero_inlet
+    extent_m:
+    - 5000.0
+    - 5000.0
+    pois: 3
+  jezero_west_v1:
+    file: bundle_jezero_west_v1.zip
+    bytes: 62223131
+    sha256: 10915f54f088f43b9080927416e382e93c0abda422ad0d4cfd22fc4dc88af229
+    site: jezero_west
+    extent_m:
+    - 5000.0
+    - 5000.0
+    pois: 3

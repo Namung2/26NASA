@@ -17,7 +17,8 @@
   GET  /sim/state         지금 도는 시나리오·배속·시각 (시뮬레이터 조작 막대용)
   GET  /sim/catalog       고르는 화면용: 지도(번들)와 그 지도의 시나리오 목록, 지금 도는 것
   POST /sim/start         {scenario, speed, manual, bundle}   manual = true면 가설 입력과 카드 선택을 사람이 한다.
-                          bundle = 번들 id(없으면 지금 올라와 있는 번들). 다른 번들을 주면 그 지도로 바꿔서 시작한다
+                          bundle = 번들 id(없으면 지금 올라와 있는 번들). 다른 번들을 주면 그 지도로 바꿔서 시작한다.
+                          그 번들이 이 기계에 아직 없고 받을 수 있는 목록(config/bundles.yaml)에 있으면 먼저 받아서 푼다(host/fetch.py)
   POST /sim/speed         {speed}                     0 = 멈춤
   POST /sim/link          {ch, state}                 state: LOST | AUTO   (데모의 링크 버튼)
   POST /sim/inject        ScenarioEvent 한 개         지금 바로 넣는다
@@ -49,6 +50,7 @@ from fastapi.responses import FileResponse, PlainTextResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from host import fetch
 from host import wire as w
 from rover import console_map
 
@@ -190,14 +192,21 @@ class Driver:
         here = Path(self.bundle_root).resolve()
         scenarios = [load_scenario(p) for p in sorted(SCENARIO_DIR.glob("*.yaml"))]
         maps = []
-        for bid, d in self.bundles().items():
+        rows = [{"id": s.scenario, "kind": s.kind, "title": s.title or s.scenario, "summary": s.summary,
+                 "start_min": s.start.eva_elapsed_min, "stops": s.poi_plan} for s in scenarios]
+        have = self.bundles()
+        for bid, d in have.items():
             meta = json.loads((d / "meta.json").read_text().replace("NaN", "null"))
             maps.append({"id": bid, "site": meta["site"], "extent_m": meta["extent_m"], "pois": len(meta.get("pois", [])),
-                         "loaded": True, "current": d == here,
-                         "thumb": f"/bundles/{bid}/tiles/hillshade/0/0/0.png",
-                         "scenarios": [{"id": s.scenario, "kind": s.kind, "title": s.title or s.scenario, "summary": s.summary,
-                                        "start_min": s.start.eva_elapsed_min, "stops": s.poi_plan}
-                                       for s in scenarios]})
+                         "loaded": True, "installed": True, "current": d == here,
+                         "thumb": f"/bundles/{bid}/tiles/hillshade/0/0/0.png", "scenarios": rows})
+        # 이 기계에 아직 없지만 받을 수 있는 지도 — 고르면 /sim/start가 먼저 받아 온다. 그림은 아직 없다(thumb = null)
+        for bid, it in fetch.manifest()["bundles"].items():
+            if bid not in have:
+                maps.append({"id": bid, "site": it["site"], "extent_m": it["extent_m"], "pois": it["pois"],
+                             "loaded": True, "installed": False, "current": False, "thumb": None,
+                             "download_mb": round(it["bytes"] / 1e6), "scenarios": rows})
+        maps.sort(key=lambda m: m["id"])
         return {"maps": maps, "running": self.state()}
 
     def state(self) -> dict:
@@ -271,6 +280,11 @@ def make_app(bundle_root: str, scenario: str | None, speed: float, manual: bool)
 
     @app.post("/sim/start")
     async def sim_start(b: StartBody):
+        if b.bundle and b.bundle not in drv.bundles():      # 이 기계에 없는 지도 → 받을 수 있으면 받아 온다(수십 초 걸린다)
+            try:                                            # 받는 동안 화면에 가는 스냅샷이 멈추지 않게 다른 스레드에서 한다
+                await asyncio.to_thread(fetch.ensure, b.bundle, Path(drv.bundle_root).resolve().parent)
+            except fetch.FetchError as e:
+                raise HTTPException(502, str(e)) from None
         try:
             drv.start(b.scenario, b.speed, b.manual, b.bundle)
         except FileNotFoundError:
@@ -405,6 +419,11 @@ def main() -> None:
     ap.add_argument("--auto", action="store_true", help="가설 입력과 카드 선택도 시나리오가 한다(구경만)")
     ap.add_argument("--port", type=int, default=8000)
     a = ap.parse_args()
+    if not (Path(a.bundle) / "meta.json").exists():       # 번들이 이 기계에 없다(저장소만 받은 직후) → 받아서 푼다
+        try:
+            fetch.ensure(Path(a.bundle).name, Path(a.bundle).resolve().parent)
+        except fetch.FetchError as e:
+            raise SystemExit(f"[bundle] {e}\n[bundle] See README.md, section 'Data bundle'.") from None
     uvicorn.run(make_app(a.bundle, a.scenario, a.speed, not a.auto), host="127.0.0.1", port=a.port, log_level="warning")
 
 

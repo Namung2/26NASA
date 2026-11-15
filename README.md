@@ -45,11 +45,23 @@ cd screen && npm install && npm run build && cd ..
 
 ## Data bundle
 
-The simulator and the screens need a data bundle in `data/bundles/jezero_west_v1/`.
-Bundles and source data are not stored in this repository because of their size (the source elevation mosaic alone is 1.8 GB).
+The simulator and the screens need a data bundle in `data/bundles/`. Three bundles (about 60 MB each) come with this
+repository as zip files in `release/`. They are unpacked on first use:
 
-To rebuild the bundle, download the source products listed under [Data](#data), place them under `자료/` at the paths
-written in `config/site.yaml`, and run:
+- When the live server starts and the bundle is not unpacked yet, it checks the zip's size and SHA-256 against
+  `config/bundles.yaml` and unpacks it into `data/bundles/`.
+- When another map is picked on the start page for the first time, it is unpacked the same way.
+- If the zip is not in `release/` (for example, a copy of the code without the zips), it is downloaded from this
+  repository instead.
+
+To unpack everything without starting the server:
+
+```bash
+.venv/bin/python -m host.fetch --all
+```
+
+To rebuild a bundle from the source data instead, download the products listed under [Data](#data), place them under
+`자료/` at the paths written in `config/site.yaml` (the source elevation mosaic alone is 1.8 GB), and run:
 
 ```bash
 .venv/bin/python -m pipeline.build --site config/site.yaml --out data/bundles/jezero_west_v1

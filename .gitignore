@@ -14,6 +14,8 @@ screen/dist/
 data/raw/
 data/bundles/
 *.zip
+# 예외: 실행할 때 풀어 쓰는 번들 묶음. 저장소에 함께 올린다 (scripts/make_release.py가 만들고 host/fetch.py가 푼다)
+!release/*.zip
 # 현장 화면에서 찍은 사진 (기기에 두는 것. 사람이 찍힐 수 있다)
 photos_live/
 # React Bits에서 받은 참고 코드 가운데 화면에서 쓰지 않는 것. 그 라이선스(MIT + Commons Clause)는 컴포넌트만 따로 다시 나눠 주는 것을

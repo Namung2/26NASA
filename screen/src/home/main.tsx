@@ -22,7 +22,7 @@ import OrbitImages from "../vendor/OrbitImages.jsx";
 import Topography from "../vendor/Topography.jsx";
 
 interface ScenarioInfo { id: string; kind: "D" | "V"; title: string; summary: string; start_min: number; stops: string[] }
-interface MapInfo { id: string; site: string; extent_m: [number, number]; pois: number; loaded: boolean; thumb: string | null; scenarios: ScenarioInfo[] }
+interface MapInfo { id: string; site: string; extent_m: [number, number]; pois: number; loaded: boolean; installed?: boolean; download_mb?: number; thumb: string | null; scenarios: ScenarioInfo[] }
 interface Running { bundle: string; scenario: string; running: boolean; t: number; home: boolean; speed: number }
 interface Catalog { maps: MapInfo[]; running: Running }
 type Step = "map" | "scenario" | "screen";
@@ -101,7 +101,7 @@ function Home() {
               <li key={m.id}>
                 <button type="button" disabled={!m.loaded} onClick={() => { setMapId(m.id); setStep("scenario"); }}>
                   <b>{siteName(m.site)}</b>
-                  <span>{m.id} · {km(m.extent_m[0])} × {km(m.extent_m[1])} · {m.pois} sites · {m.scenarios.length} scenarios{m.loaded ? "" : " · not loaded on this program"}</span>
+                  <span>{m.id} · {km(m.extent_m[0])} × {km(m.extent_m[1])} · {m.pois} sites · {m.scenarios.length} scenarios{m.loaded ? "" : " · not loaded on this program"}{m.installed === false ? ` · downloads on first use (${m.download_mb} MB)` : ""}</span>
                 </button>
               </li>
             ))}
