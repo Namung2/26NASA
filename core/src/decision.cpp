@@ -615,7 +615,10 @@ bt_status bt_decide(bt_ctx* c, const bt_state* st, const bt_stop* plan, uint32_t
     if (n_plan > 0) add_candidate(c, st, BT_OPT_ROUTE, BT_LABEL_CONTINUE_PLAN, 0, plan, n_plan, false);
 
     // 경로 갈림길: 다음 정지점까지를 다른 성향으로 가는 길을 선택지로 낸다. 결정 지점을 띄운 까닭("비슷한 길이 둘 이상 있다")과
-    // 묻는 내용이 같아야 한다. 정지점은 그대로이고 첫 정지점의 성향만 다르다. 표시 수치가 이미 나온 길과 전부 같으면 내지 않는다
+    // 묻는 내용이 같아야 한다. 정지점은 그대로이고 첫 정지점의 성향만 다르다. 표시 수치가 이미 나온 길과 전부 같으면 내지 않는다.
+    // 이름값을 하는 길만 낸다: "가장 빠른 길"은 화면에 적히는 시간이 계획 유지보다 짧을 때만, "완만한 길"은 화면에 적히는 최대 경사가
+    // 계획 유지보다 낮을 때만. 길은 격자 위의 비용으로 찾고 시간은 곧게 편 선으로 다시 재므로(planner.cpp straight_measure), 빠른 성향으로
+    // 찾은 길이 다시 잰 뒤에는 계획보다 느릴 수 있다 — 그런 길에 "가장 빠른 길"이라는 이름을 붙여 내지 않는다
     if (n_plan > 0 && tr->kind == BT_TRIG_FORK && tr->cause_kind == BT_CAUSE_ROUTE && D.n_cand > 0) {
       const uint8_t alt_profile[2] = {1, 2};
       const uint8_t alt_label[2] = {BT_LABEL_ROUTE_FASTEST, BT_LABEL_ROUTE_GENTLE};
@@ -634,7 +637,9 @@ bt_status bt_decide(bt_ctx* c, const bt_state* st, const bt_stop* plan, uint32_t
                 path_separation(c, D.pool + old.path_off, old.path_len, D.cand_res[i], D.pool + nw.path_off, nw.path_len, D.cand_res[n_before])
                     <= static_cast<double>(cfg.r_obs_m);
         }
-        if (dup) { D.n_cand = n_before; D.pool_len = pool_before; }   // 눈에 같은 길 → 뺀다
+        const bt_option& keep = D.cand[0];                              // 계획 유지 (맨 먼저 만든 후보)
+        const bool better = a == 0 ? nw.time_min < keep.time_min : nw.max_slope_deg < keep.max_slope_deg;
+        if (dup || !better) { D.n_cand = n_before; D.pool_len = pool_before; }   // 눈에 같은 길이거나 이름값을 못 하는 길 → 뺀다
       }
     }
 

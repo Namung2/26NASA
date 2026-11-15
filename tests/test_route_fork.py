@@ -5,6 +5,10 @@
 
 "다른 길"의 기준: 두 길이 관측 반경(science.r_obs_m)보다 멀리 벌어져야 한다. 8방향 격자에서는 비용이 같은 길이 칸만 다르게 여러 개
 나오는데 곧게 펴면 같은 선이다 — 그런 것은 갈림길로 치지 않고, 고를 다른 길이 없으면 갈림길 카드를 내지 않는다.
+
+이름값: route_fastest는 화면에 적히는 시간이 계획 유지보다 짧을 때만, route_gentle은 화면에 적히는 최대 경사가 계획 유지보다 낮을 때만 나온다.
+길은 격자 위의 비용으로 찾고 시간은 곧게 편 선으로 다시 재므로 "빠른 성향"의 길이 다시 잰 뒤에 더 느릴 수 있다(2026-11-15, Inlet 지도의 D2 첫
+카드에서 계획 165분 / "Fastest route" 166분 20초로 나온 것을 보고 정한 규칙).
 """
 from __future__ import annotations
 
@@ -82,6 +86,10 @@ def test_real_fork_offers_the_other_route(real_bundle_root):
             for o in alts:
                 assert o.stops[0].profile in (1, 2) and (o.stops[0].xy.x, o.stops[0].xy.y) == (keep.stops[0].xy.x, keep.stops[0].xy.y)
                 assert o.nlt_margin_min >= 0
+                if bt.LABEL_KEYS[o.label_key] == "route_fastest":                   # 이름값: 더 빠를 때만 "가장 빠른 길"
+                    assert o.time_min < keep.time_min
+                else:                                                               # 더 완만할 때만 "완만한 길"
+                    assert o.max_slope_deg < keep.max_slope_deg
             dp = cv.decision_from_bt(core, d, [p["id"] for p in b.meta["pois"]])
             assert any(o.stops[0].profile != "balanced" for o in dp.options)        # 고르면 그 성향이 계획에 실린다
             assert all(not any(x in line.lower() for x in tp.BANNED) for line in tp.dp_text(dp))
@@ -90,3 +98,34 @@ def test_real_fork_offers_the_other_route(real_bundle_root):
         if found >= 3:
             break
     assert found >= 1, "성향별 길이 갈리는 곳을 찾지 못했다"
+
+
+@pytest.mark.real
+def test_named_route_is_better_in_its_own_number(real_bundle_root):
+    """갈림길 카드의 후보 전부를 본다(선택지로 뽑히기 전의 것까지): 이름이 붙은 길은 그 이름의 수치에서 계획 유지보다 낫다."""
+    b = hb.load(str(real_bundle_root), "rover")
+    park = b.meta["rover_parks"][0]
+    core, _ = make_core("rover", b, park=park["id"], env=b.env_at(3600.0))
+    core.science_update(3600.0)
+    ok = base_passable(b, core.cfg.theta_max_deg)
+    rng = random.Random(11)
+    looked = 0
+    for _ in range(400):
+        a, g = random_passable_xy(rng, ok, b.res_m), random_passable_xy(rng, ok, b.res_m)
+        if not 300 <= math.dist(a, g) <= 1500 or math.dist(a, park["xy"]) > 1500:
+            continue
+        stop = bt.BtStop()
+        stop.xy, stop.dwell_min, stop.purpose, stop.poi = bt.BtXY(*g), 10.0, 0, bt.POI_NONE
+        d = core.decide(state_at(a, 3600.0, rover=park["xy"]), [stop], trigger(bt.TRIG_FORK, "route"))
+        cands = core.decision_candidates(d)
+        keep = next((o for o in cands if bt.LABEL_KEYS[o.label_key] == "continue_plan"), None)
+        for o in cands:
+            if bt.LABEL_KEYS[o.label_key] == "route_fastest":
+                assert o.time_min < keep.time_min
+            if bt.LABEL_KEYS[o.label_key] == "route_gentle":
+                assert o.max_slope_deg < keep.max_slope_deg
+        core.decision_close(d.seq)
+        looked += 1
+        if looked >= 40:
+            break
+    assert looked >= 10
