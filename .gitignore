@@ -15,6 +15,8 @@ data/bundles/
 *.zip
 # 밖에서 가져온 디자인 참고 코드 (올리지 않는다. 없어도 빌드된다 — screen/src/home/main.tsx)
 screen/src/vendor/
+# 현장 화면에서 찍은 사진 (기기에 두는 것. 사람이 찍힐 수 있다)
+photos_live/
 # 개인 작업 흔적
 .backup_*/
 docs.zip

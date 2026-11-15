@@ -16,11 +16,12 @@ import { SimBar } from "../shared/SimBar";
 import { useSocket } from "../shared/socket";
 import { SourceTip } from "../shared/SourceTip";
 import type { ScreenCmd, Snapshot } from "../types";
+import { CameraPanel } from "./Camera";
 import { HypConfirmDialog, HypothesisMenu } from "./Hypothesis";
 import { MarkPanel, ObsPanel } from "./Panels";
 
 type Cmd = ScreenCmd["cmd"];
-type Panel = null | "obs" | "hyp" | "mark" | "layers";
+type Panel = null | "obs" | "hyp" | "photo" | "mark" | "layers";
 
 // 조작 단추의 그림. 뜻을 돕는 선 그림일 뿐이다
 const ICON: Record<string, JSX.Element> = {
@@ -112,13 +113,14 @@ export function FieldApp() {
         <Dock label="Actions" items={[
           { key: "obs", icon: ICON.obs, label: "Observe", on: panel === "obs", onClick: () => setPanel(panel === "obs" ? null : "obs") },
           { key: "hyp", icon: ICON.hyp, label: "Hypo.", title: "Hypothesis", on: panel === "hyp", onClick: () => setPanel(panel === "hyp" ? null : "hyp") },
-          { key: "photo", icon: ICON.photo, label: "Photo", onClick: () => cmd({ kind: "photo" }) },
+          { key: "photo", icon: ICON.photo, label: "Photo", on: panel === "photo", onClick: () => setPanel(panel === "photo" ? null : "photo") },
           { key: "mark", icon: ICON.mark, label: "Mark", title: "New site · Blocked", on: panel === "mark", onClick: () => setPanel(panel === "mark" ? null : "mark") },
           { key: "layers", icon: ICON.layers, label: "Layers", on: panel === "layers", onClick: () => setPanel(panel === "layers" ? null : "layers") },
           { sep: true },
           { key: "home", icon: ICON.home, label: "Return", tone: "warm", onClick: () => cmd({ kind: "return" }) },
         ]} />
         {panel === "obs" && <ObsPanel meta={meta} onSend={(c) => { cmd(c); setPanel(null); }} onClose={() => setPanel(null)} />}
+        {panel === "photo" && <CameraPanel onTraceOnly={() => { cmd({ kind: "photo" }); setPanel(null); }} onClose={() => setPanel(null)} />}
         {panel === "mark" && <MarkPanel meta={meta} onSend={(c) => { cmd(c); setPanel(null); }} onClose={() => setPanel(null)} />}
         {panel === "hyp" && <HypothesisMenu meta={meta} draft={draft} onSubmit={(c) => { cmd(c); setPanel(null); }} onClose={() => setPanel(null)} />}
         {panel === "layers" && <div className="panel"><h3>Layers</h3><LayerPanel meta={meta} on={layers} setOn={setLayers} shadowBin={snap.shadow_bin} /><div className="row"><button type="button" onClick={() => setPanel(null)}>Close</button></div></div>}

@@ -16,9 +16,18 @@
   POST /sim/link          {ch, state}                 state: LOST | AUTO   (데모의 링크 버튼)
   POST /sim/inject        ScenarioEvent 한 개         지금 바로 넣는다
   GET  /sim/log           판정 기록(JSONL)
+  POST /photo             사진 한 장(JPEG, 본문 그대로) → 그 자리에 촬영 흔적을 남기고 파일을 photos_live/에 둔다 (S2 §사진)
+  GET  /photos            이번 실행에서 찍은 사진 목록 [{event_id, url, t, xy}]
+  GET  /photos/{name}     사진 파일
   GET  /                  screen/dist (npm run build로 만든 화면)
 
 /sim/* 은 보여 주기·개발 전용이다. 실제 기기에는 없다.
+
+사진 (S2: "파일은 기기에 둔다 — photos_live/<이벤트 id>.jpg. 로버에는 사진이 있다는 이벤트만 간다")
+  · 화면이 사진을 올리면 기기 프로그램에 "촬영" 명령(CmdPhoto)을 넣고, 그때 생긴 흔적 이벤트의 id로 파일 이름을 짓는다.
+    계약(host/wire.py)은 그대로다 — 사진 본문은 소켓이 아니라 이 주소로 오고, 스냅샷에는 싣지 않는다.
+  · 파일 이름 앞에 실행을 시작한 시각을 붙인다. 시나리오를 다시 시작하면 이벤트 id가 처음부터 다시 매겨져 겹치기 때문이다.
+  · 사진의 내용은 읽지 않는다(해석·분류 없음). 로버로 넘기는 일(photo_sync)은 아직 없다.
 """
 from __future__ import annotations
 
@@ -29,8 +38,8 @@ import time
 from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
-from fastapi.responses import PlainTextResponse
+from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi.responses import FileResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -42,6 +51,8 @@ from .sim import Sim
 ROOT = Path(__file__).resolve().parents[1]
 SCENARIO_DIR = ROOT / "sim/scenarios"
 TICK_WALL_S = 0.05            # 실제 시간으로 이만큼마다 시뮬을 밀고 화면에 보낸다(초당 20번)
+PHOTO_DIR = ROOT / "photos_live"   # 기기에 두는 사진 (저장소에 올리지 않는다 — .gitignore)
+MAX_PHOTO_BYTES = 12 * 1024 * 1024  # 사진 한 장의 상한. 문서에 정해진 값이 없어 서버를 지키려고 둔 기술값이다
 MAX_TICKS_PER_PUSH = 200      # 한 번에 미는 시뮬 틱의 상한 — 배속을 너무 높여도 서버가 멈추지 않게
 
 
@@ -74,6 +85,8 @@ class Driver:
         self.consoles: set[WebSocket] = set()
         self._debt = 0.0                  # 아직 밀지 못한 시뮬 시간(초)
         self._last = time.monotonic()
+        self.run_tag = ""                 # 실행을 시작한 시각 — 사진 파일 이름 앞에 붙는다
+        self.photos: list[dict] = []      # 이번 실행에서 찍은 사진 (찍은 순서)
 
     def start(self, name: str, speed: float, manual: bool) -> None:
         path = SCENARIO_DIR / f"{name}.yaml"
@@ -84,6 +97,23 @@ class Driver:
         sim.manual_types = {"hyp"} if manual else set()
         sim.step()                        # 첫 스냅샷을 만든다
         self.sim, self.name, self.speed, self.manual, self._debt = sim, name, float(speed), manual, 0.0
+        self.run_tag, self.photos = time.strftime("%Y%m%dT%H%M%S"), []
+
+    def add_photo(self, data: bytes) -> dict:
+        """기기 프로그램에 촬영 명령을 넣고, 그때 생긴 흔적 이벤트의 id로 사진을 저장한다. 목록에 넣은 항목을 돌려준다."""
+        dev = self.sim.dev
+        before = set(dev.table.by_id)
+        dev.on_command(w.CmdPhoto())
+        made = [e for i, e in dev.table.by_id.items() if i not in before and e.type == "trace" and e.payload.kind == "photo"]
+        if not made:                      # 아직 위치를 한 번도 받지 못했다 — 기기 프로그램이 흔적을 남기지 않았다
+            raise RuntimeError("no trace")
+        ev = made[-1]
+        name = f"{self.run_tag}_{ev.id.replace(':', '_')}.jpg"
+        PHOTO_DIR.mkdir(exist_ok=True)
+        (PHOTO_DIR / name).write_bytes(data)
+        item = {"event_id": ev.id, "url": f"/photos/{name}", "t": ev.ts, "xy": [round(ev.geom.xy[0], 1), round(ev.geom.xy[1], 1)]}
+        self.photos.append(item)
+        return item
 
     def state(self) -> dict:
         s = self.sim
@@ -182,6 +212,30 @@ def make_app(bundle_root: str, scenario: str | None, speed: float, manual: bool)
     async def sim_log():
         rows = drv.sim.log.rows if drv.sim else []
         return "\n".join(json.dumps(r, ensure_ascii=False, default=str) for r in rows)
+
+    @app.post("/photo")
+    async def photo_add(req: Request):
+        if drv.sim is None:
+            raise HTTPException(409, "no scenario is running")
+        data = await req.body()
+        if len(data) > MAX_PHOTO_BYTES:
+            raise HTTPException(413, "photo is too large")
+        if data[:3] != b"\xff\xd8\xff":                    # JPEG만 받는다(화면이 JPEG로 바꿔 보낸다)
+            raise HTTPException(415, "not a JPEG image")
+        try:
+            return drv.add_photo(data)
+        except RuntimeError:
+            raise HTTPException(409, "the device has no position yet") from None
+
+    @app.get("/photos")
+    async def photo_list():
+        return drv.photos
+
+    @app.get("/photos/{name}")
+    async def photo_file(name: str):
+        if not any(p["url"] == f"/photos/{name}" for p in drv.photos):    # 목록에 있는 이름만 내준다(경로를 따라 올라가지 못하게)
+            raise HTTPException(404, "no such photo")
+        return FileResponse(PHOTO_DIR / name, media_type="image/jpeg")
 
     @app.websocket("/ws/screen")
     async def ws_screen(ws: WebSocket):
