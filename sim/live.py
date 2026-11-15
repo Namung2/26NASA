@@ -41,6 +41,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import gc
 import json
 import os
 import time
@@ -150,8 +151,13 @@ class Driver:
         root = self.bundle_root if bundle is None else str(self.bundles()[bundle])
         sc = load_scenario(path)
         meta_id = json.loads((Path(root) / "meta.json").read_text().replace("NaN", "null"))["bundle_id"]
+        # 앞의 시뮬레이터를 먼저 내려놓고 새것을 만든다. 둘을 잠깐이라도 함께 들고 있으면 메모리가 두 배로 든다 —
+        # 로버 쪽 격자(2 m, 2500 × 2500)가 커서 하나가 370 MB쯤이고, 메모리 512 MB짜리 서버에서는 다시 시작하거나 지도를 바꾸는 순간 죽는다
+        # (2026-11-15, 512 MB로 제한한 컨테이너에서 확인). 없는 시나리오·없는 번들은 위에서 이미 걸러졌다.
+        self.sim, self._height, self._png = None, None, {}
+        gc.collect()
         sim = Sim(sc, root, any_site=sc.site != meta_id)
-        self.bundle_root = root           # 시뮬레이터가 만들어진 뒤에 바꾼다 — 만들다 실패하면 앞의 지도가 그대로 남는다
+        self.bundle_root = root
         sim.auto_choose = not manual
         sim.manual_types = {"hyp"} if manual else set()
         sim.step()                        # 첫 스냅샷을 만든다
@@ -239,11 +245,16 @@ class Driver:
         s = self.sim
         if s is None:
             return
+        # 보낼 글을 먼저 다 만들고, 시뮬레이터를 가리키는 이름(s)을 놓은 뒤에 보낸다. 보내는 동안(await)에는 다른 요청이 끼어들 수 있는데,
+        # 그 요청이 시뮬레이터를 새로 만드는 것(start)이면 여기서 옛것을 붙들고 있는 만큼 메모리가 두 배로 든다(start의 설명 참고)
         snap = s.dev.snapshot()
-        if snap is not None and self.screens:
-            await self._send(self.screens, snap.model_dump_json())
-        if self.consoles:
-            await self._send(self.consoles, s.rover.console_snapshot(s.t, self._lmst()).model_dump_json())
+        to_screens = snap.model_dump_json() if snap is not None and self.screens else None
+        to_consoles = s.rover.console_snapshot(s.t, self._lmst()).model_dump_json() if self.consoles else None
+        s = snap = None
+        if to_screens is not None:
+            await self._send(self.screens, to_screens)
+        if to_consoles is not None:
+            await self._send(self.consoles, to_consoles)
 
     async def run(self) -> None:
         while True:
@@ -260,6 +271,7 @@ class Driver:
                     if s.done():
                         break
                     s.step()
+            s = None                      # 기다리는 동안(await) 옛 시뮬레이터를 붙들고 있지 않는다 — start가 그 사이에 새것을 만들 수 있다
             self._last = now
             await self.push()
 
