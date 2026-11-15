@@ -1,0 +1,18 @@
+# 이미지를 만들 때 보내지 않는 것. release/*.zip(지도 번들)은 보낸다 — Dockerfile이 풀어 넣는다
+.git
+.venv
+.claude
+build
+data
+reports
+docs
+자료
+photos_live
+**/__pycache__
+**/node_modules
+screen/dist
+screen/vendor_reference
+*.zip
+!release/*.zip
+.backup_*
+.DS_Store

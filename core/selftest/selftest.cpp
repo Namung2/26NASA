@@ -757,7 +757,7 @@ static void test_decide() {
   CHECK(bt_nlt_feasible(k.ctx, &one, plan, 2, &st, &nl) == BT_OK && nl.slack_min < 0.0f);   // 제자리에서 20분 머물면 넘긴다
 
   // 환경: 그림자 구간·먼지가 바뀌면 ENV
-  Core kk; bt_config cc = sci_cfg(BT_NODE_ROVER, BT_OPTMODE_PARETO); cc.shadow_bins = 0;
+  Core kk;
   CHECK(sci_setup(kk, m, s, BT_NODE_ROVER, BT_OPTMODE_PARETO));
   std::memset(&in2, 0, sizeof(in2));
   CHECK(bt_triggers(kk.ctx, &st, &st, &in2, tr, 8, &nt) == BT_OK && nt == 0);

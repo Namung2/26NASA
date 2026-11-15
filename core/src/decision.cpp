@@ -164,7 +164,7 @@ bool add_candidate(bt_ctx* c, const bt_state* st, uint8_t kind, uint8_t label_ke
       flags = static_cast<uint8_t>(flags | BT_OPTF_LATE);      // 한계를 이미 넘긴 뒤의 귀환
     }
     FieldView fv;
-    field_view(c, &fv);
+    if (!field_view(c, &fv)) return false;    // 위의 bt_depart_limit이 통과했으면 필드는 있다. GCC가 그것을 알지 못해 경고하므로 여기서도 본다
     std::memset(own, 0, sizeof(own));
     own[0].xy = cell_center(fv.geom, p.cells[p.len - 1].row, p.cells[p.len - 1].col);
     own[0].purpose = BT_STOP_ROVER;

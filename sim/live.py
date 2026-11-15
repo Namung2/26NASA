@@ -24,6 +24,7 @@
   POST /sim/inject        ScenarioEvent 한 개         지금 바로 넣는다
   GET  /sim/log           판정 기록(JSONL)
   POST /photo             사진 한 장(JPEG, 본문 그대로) → 그 자리에 촬영 흔적을 남기고 파일을 photos_live/에 둔다 (S2 §사진)
+                          환경 변수 BT_PHOTO_LIMIT가 있으면 한 번의 실행에 그 수까지만 받는다(넘으면 429) — 아래 PHOTO_LIMIT
   GET  /photos            이번 실행에서 찍은 사진 목록 [{event_id, url, t, xy}]
   GET  /photos/{name}     사진 파일
   GET  /                  screen/dist (npm run build로 만든 화면)
@@ -41,6 +42,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
 import time
 from contextlib import asynccontextmanager, suppress
 from pathlib import Path
@@ -62,6 +64,10 @@ SCENARIO_DIR = ROOT / "sim/scenarios"
 TICK_WALL_S = 0.05            # 실제 시간으로 이만큼마다 시뮬을 밀고 화면에 보낸다(초당 20번)
 PHOTO_DIR = ROOT / "photos_live"   # 기기에 두는 사진 (저장소에 올리지 않는다 — .gitignore)
 MAX_PHOTO_BYTES = 12 * 1024 * 1024  # 사진 한 장의 상한. 문서에 정해진 값이 없어 서버를 지키려고 둔 기술값이다
+# 한 번의 실행(시나리오를 시작해서 다시 시작하기 전까지)에 받는 사진 수의 상한. 0 = 제한 없음(내 기계에서 돌릴 때).
+# 공개 주소에 올린 서버는 아무나 사진을 올릴 수 있으므로 환경 변수 BT_PHOTO_LIMIT로 건다 — Dockerfile이 5로 둔다(2026-11-15 사용자 결정:
+# 시험용으로 5장까지). 제한이 걸려 있으면 시나리오를 다시 시작할 때 앞 실행의 사진 파일을 지운다 → 서버에 남는 사진은 많아야 그 수다.
+PHOTO_LIMIT = int(os.environ.get("BT_PHOTO_LIMIT", "0") or 0)
 MAX_TICKS_PER_PUSH = 200      # 한 번에 미는 시뮬 틱의 상한 — 배속을 너무 높여도 서버가 멈추지 않게
 
 
@@ -150,6 +156,9 @@ class Driver:
         sim.manual_types = {"hyp"} if manual else set()
         sim.step()                        # 첫 스냅샷을 만든다
         self.sim, self.name, self.speed, self.manual, self._debt = sim, name, float(speed), manual, 0.0
+        if PHOTO_LIMIT:                       # 제한이 걸린 서버: 앞 실행의 사진 파일을 지운다(목록에서도 빠지므로 어차피 더는 내주지 않는다)
+            for p in self.photos:
+                (PHOTO_DIR / p["url"].rsplit("/", 1)[-1]).unlink(missing_ok=True)
         self.run_tag, self.photos = time.strftime("%Y%m%dT%H%M%S"), []
         self._height, self._png = None, {}    # 시나리오를 새로 시작했다 → 앞 판의 그림을 쓰지 않는다
 
@@ -322,6 +331,8 @@ def make_app(bundle_root: str, scenario: str | None, speed: float, manual: bool)
     async def photo_add(req: Request):
         if drv.sim is None:
             raise HTTPException(409, "no scenario is running")
+        if PHOTO_LIMIT and len(drv.photos) >= PHOTO_LIMIT:
+            raise HTTPException(429, f"photo limit reached ({PHOTO_LIMIT} per run on this server)")
         data = await req.body()
         if len(data) > MAX_PHOTO_BYTES:
             raise HTTPException(413, "photo is too large")
@@ -418,13 +429,14 @@ def main() -> None:
     ap.add_argument("--speed", type=float, default=10.0, help="시뮬 배속(1 = 실제 시간)")
     ap.add_argument("--auto", action="store_true", help="가설 입력과 카드 선택도 시나리오가 한다(구경만)")
     ap.add_argument("--port", type=int, default=8000)
+    ap.add_argument("--host", default="127.0.0.1", help="듣는 주소. 컨테이너 안에서는 0.0.0.0 (Dockerfile 참고)")
     a = ap.parse_args()
     if not (Path(a.bundle) / "meta.json").exists():       # 번들이 이 기계에 없다(저장소만 받은 직후) → 받아서 푼다
         try:
             fetch.ensure(Path(a.bundle).name, Path(a.bundle).resolve().parent)
         except fetch.FetchError as e:
             raise SystemExit(f"[bundle] {e}\n[bundle] See README.md, section 'Data bundle'.") from None
-    uvicorn.run(make_app(a.bundle, a.scenario, a.speed, not a.auto), host="127.0.0.1", port=a.port, log_level="warning")
+    uvicorn.run(make_app(a.bundle, a.scenario, a.speed, not a.auto), host=a.host, port=a.port, log_level="warning")
 
 
 if __name__ == "__main__":
