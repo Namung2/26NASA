@@ -239,7 +239,12 @@ static void test_field() {
   double ratio_lo = 1e9, ratio_hi = 0.0;
   for (int it = 0; it < 200; ++it) {
     seed = seed * 1664525u + 1013904223u; const int r = (seed >> 8) % 64, c = (seed >> 16) % 64;
-    if (!std::isfinite(ft[r * 64 + c])) { CHECK(bt_return_path(k.ctx, BT_FIELD_ROVER_RETURN, cxy(5, r, c), &p) == BT_ERR_UNREACHABLE); continue; }
+    if (!std::isfinite(ft[r * 64 + c])) {
+      // 막힌 칸: 가까이에 갈 수 있는 칸이 있으면 거기서 시작한 경로(snapped_m > 0), 없으면 길 없음
+      const bt_status rs = bt_return_path(k.ctx, BT_FIELD_ROVER_RETURN, cxy(5, r, c), &p);
+      CHECK(rs == BT_ERR_UNREACHABLE || (rs == BT_OK && p.snapped_m > 0.0 && p.len >= 1));
+      continue;
+    }
     CHECK(bt_return_path(k.ctx, BT_FIELD_ROVER_RETURN, cxy(5, r, c), &p) == BT_OK);
     CHECK(p.cells[p.len - 1].row == 40 && p.cells[p.len - 1].col == 58 && violations(m, p) == 0);
     bt_path_metrics pm;

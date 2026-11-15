@@ -104,6 +104,7 @@ export interface ConsoleSnapshot {
   link_up: boolean;
   shadow_bin: number;
   hyp_draft: HypDraft | null;
+  science_rev: number;
 }
 
 export interface CrewStatus {

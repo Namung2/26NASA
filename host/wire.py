@@ -415,6 +415,7 @@ class ConsoleSnapshot(M):
     link_up: bool = True
     shadow_bin: int = 0
     hyp_draft: HypDraft | None = None    # 콘솔의 가설 양식에서 고른 것(확인 창에 되읽기 문장과 함께 뜬다)
+    science_rev: int = 0             # 과학 가치 지도가 다시 계산될 때마다 1씩 오른다. 화면은 이 값이 바뀔 때만 /console/science.png를 다시 받는다
 
 
 class CmdChoose(M):

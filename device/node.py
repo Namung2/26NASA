@@ -147,10 +147,12 @@ class DeviceNode:
             if done.purpose != "rover":             # 로버에 닿은 것은 "다녀온 지점"이 아니라 귀환이다
                 self._visited.append(done)
             self._route_key = None
-            # 지점에 닿아 계획이 한 칸 나아갔다 → 떠 있던 로버의 카드는 "닿기 전의 계획"으로 계산한 것이라 낡았다.
-            # 그대로 두면 그 카드의 "계획 유지"가 방금 지난 지점을 다시 들르는 계획이 된다(되돌아가게 된다) → 내린다.
-            # 연결돼 있으면 로버가 지금 상태로 다시 계산한 카드를 곧 보낸다(rover/service.py). 기기가 직접 낸 귀환 카드는 그대로 둔다
-            if self.dp is not None and self.dp_source != "local":
+            # 지점에 닿아 계획이 한 칸 나아갔다 → 떠 있던 로버의 카드 가운데 "방금 닿은 지점이 선택지에 든 것"은 닿기 전의 계획으로
+            # 계산한 것이라 낡았다. 그대로 두면 그 카드의 "계획 유지"가 방금 지난 지점을 다시 들르는 계획이 된다(되돌아가게 된다) → 내린다.
+            # 연결돼 있으면 로버가 지금 상태로 다시 계산한 카드를 보낸다(rover/service.py). 로버의 도착 판정이 한 틱 빨라 새 카드가
+            # 먼저 와 있을 수 있는데, 그 카드에는 닿은 지점이 없으므로 내리지 않는다. 기기가 직접 낸 귀환 카드도 그대로 둔다
+            if self.dp is not None and self.dp_source != "local" and any(
+                    math.dist(st.xy, done.xy) < 1e-6 for o in self.dp.options for st in o.stops):
                 self.dp = None
 
         # 안전 감시와 귀환 카드 — 링크와 무관하게 기기가 직접 한다

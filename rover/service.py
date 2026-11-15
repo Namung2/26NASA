@@ -76,6 +76,7 @@ class RoverService:
         self.hyp_draft: w.HypDraft | None = None    # 콘솔의 가설 양식에서 고른 것 (확인 창에 뜬다)
         self._draft_anchor: str | None = None
         self.n_hyp = 0
+        self.science_rev = 0                        # 과학 가치 지도를 다시 계산한 횟수 (콘솔이 그림을 다시 받을지 정하는 데 쓴다)
         self._queued: list[w.Msg] = []              # 기기의 메시지 없이 생긴 보낼 것(콘솔에서 넣은 가설의 카드). 다음 하트비트의 답에 실린다
 
     def _initial_events(self) -> list:
@@ -101,6 +102,7 @@ class RoverService:
         self.core.cost_to_go(self.park_xy)
         tm, nx, res = self.core.field_copy()
         self.core.science_update(t)
+        self.science_rev += 1
         self._views = science_views(self.core, self.table, self.trace_max)
         self.seq += 1
         head = w.ReturnFieldMsg(ch="wifi", seq=self.seq, node="rover", t_send=t, rover_id="rover", rover_xy=self.park_xy, res_m=res, shape=tm.shape)
@@ -160,6 +162,7 @@ class RoverService:
             self.set_env(self._env)
             self.core.cost_to_go(self.park_xy)
         self.core.science_update(self.t)
+        self.science_rev += 1
         self._views = science_views(self.core, self.table, self.trace_max)
         return self._check_triggers(fresh, prev_plan)
 
@@ -296,4 +299,4 @@ class RoverService:
         return w.ConsoleSnapshot(t=t, lmst=lmst, rover_pos=self.park_xy, candidates=self.candidates, shown_ids=shown, crew=crew, alerts=alerts,
                                  recent_decisions=self.recent_dps, recent_events=self.table.ordered()[-20:], hyps=self._views["hyps"],
                                  obs=self._views["obs"], traces=self._views["traces"], missing_layers=self.meta.get("missing_layers", []), link_up=link_up,
-                                 shadow_bin=max(0, self.env_bin), hyp_draft=self.hyp_draft)
+                                 shadow_bin=max(0, self.env_bin), hyp_draft=self.hyp_draft, science_rev=self.science_rev)

@@ -71,7 +71,11 @@ def test_v1_return_path_matches_field(tier, seeded):
         r, c = int(-xy[1] // fres), int(xy[0] // fres)
         p = core.return_path(xy)
         if not math.isfinite(time_s[r, c]):
-            assert p.status == bt.ERR_UNREACHABLE
+            # 선 칸이 귀환 지도에서 막힌 칸: 가까이(snap_max_m 안)에 갈 수 있는 칸이 있으면 거기서 시작한 경로가 나오고, 없으면 길 없음
+            assert p.status in (bt.OK, bt.ERR_UNREACHABLE)
+            if p.status == bt.OK:
+                assert 0 < p.c.snapped_m <= core.cfg.snap_max_m + 1e-6 and math.dist(p.xy()[0], xy) <= core.cfg.snap_max_m + fres
+                assert core.depart_limit(state_at(xy)).degraded == 1      # 출발 한계도 같은 식으로 물러난 값이다
             continue
         assert p.status == bt.OK
         assert p.cost == pytest.approx(float(time_s[r, c]), rel=1e-6)            # 지도에 적힌 값 그대로
@@ -116,3 +120,26 @@ def test_v1_shadow_bin_changes_costmap_not_passability():
 @pytest.mark.real
 def test_v1_slope_distribution_report(real_bundle_root):
     pytest.skip("번들에 선행 로버의 실제 주행 경로가 없다 — 견줄 대상이 없어 리포트를 만들지 않는다")
+
+
+def test_v1_return_path_from_blocked_cell_snaps():
+    """귀환 지도에서 막힌 칸에 서 있어도(기기의 격자로는 걸을 수 있는 좁은 길) 귀환 경로와 출발 한계가 함께 나온다.
+    둘 중 하나만 비면 화면에 "귀환 지도 없음"이 잠깐 뜬다 — 팀원이 걷는 도중에 본 증상이다."""
+    rover, rb = make_core("rover")
+    t, nx, fres = rover.field_copy()
+    dev, _db = make_core("device", field=False)
+    dev.set_field(t, nx, fres)
+    blocked = ~np.isfinite(t)
+    near = np.zeros_like(blocked)                      # 막힌 칸 가운데 바로 옆에 갈 수 있는 칸이 있는 것
+    fin = np.isfinite(t)
+    near[1:-1, 1:-1] = blocked[1:-1, 1:-1] & (fin[:-2, 1:-1] | fin[2:, 1:-1] | fin[1:-1, :-2] | fin[1:-1, 2:])
+    rows, cols = np.nonzero(near)
+    assert len(rows) > 10
+    for i in range(0, len(rows), max(1, len(rows) // 25)):
+        xy = ((cols[i] + 0.5) * fres, -(rows[i] + 0.5) * fres)
+        p = dev.return_path(xy)
+        assert p.status == bt.OK and 0 < p.c.snapped_m <= dev.cfg.snap_max_m
+        n = dev.depart_limit(state_at(xy))
+        assert n.degraded == 1 and math.isfinite(n.t_depart)
+    assert dev.return_path(mb.ROOM).status == bt.ERR_UNREACHABLE      # 갇힌 방의 한가운데는 여전히 길 없음
+    assert rb is not None

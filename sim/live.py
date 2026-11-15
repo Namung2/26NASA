@@ -10,6 +10,9 @@
   WS   /ws/screen         기기 프로그램 → 현장 화면: Snapshot(JSON) / 화면 → ScreenCmd
   WS   /ws/console        로버 프로그램 → 로버 콘솔: ConsoleSnapshot / 콘솔 → ConsoleCmd
   GET  /bundle/{path}     번들 파일(meta.json, tiles/…)
+  GET  /console/height.json          지형의 높이 격자 (3D 보기용. 번들마다 한 번 만든다)
+  GET  /console/science.png?kind=…   지금의 과학 가치 지도를 색 입힌 그림. kind: expected | max | base | var
+  GET  /console/science_legend.json  그 그림의 색 눈금·등급 경계·놓임 (rover/console_map.py)
   GET  /sim/state         지금 도는 시나리오·배속·시각 (시뮬레이터 조작 막대용)
   POST /sim/start         {scenario, speed, manual}   manual = true면 가설 입력과 카드 선택을 사람이 한다
   POST /sim/speed         {speed}                     0 = 멈춤
@@ -39,11 +42,12 @@ from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse, PlainTextResponse
+from fastapi.responses import FileResponse, PlainTextResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from host import wire as w
+from rover import console_map
 
 from .scenario import ScenarioEvent, load_scenario
 from .sim import Sim
@@ -83,6 +87,8 @@ class Driver:
         self.manual = True
         self.screens: set[WebSocket] = set()
         self.consoles: set[WebSocket] = set()
+        self._height: dict | None = None  # 높이 격자 (번들이 같으면 다시 만들지 않는다)
+        self._png: dict[tuple[int, str], bytes] = {}   # (science_rev, kind) → 그림. 지도가 바뀌면 새로 만든다
         self._debt = 0.0                  # 아직 밀지 못한 시뮬 시간(초)
         self._last = time.monotonic()
         self.run_tag = ""                 # 실행을 시작한 시각 — 사진 파일 이름 앞에 붙는다
@@ -98,6 +104,7 @@ class Driver:
         sim.step()                        # 첫 스냅샷을 만든다
         self.sim, self.name, self.speed, self.manual, self._debt = sim, name, float(speed), manual, 0.0
         self.run_tag, self.photos = time.strftime("%Y%m%dT%H%M%S"), []
+        self._height, self._png = None, {}    # 시나리오를 새로 시작했다 → 앞 판의 그림을 쓰지 않는다
 
     def add_photo(self, data: bytes) -> dict:
         """기기 프로그램에 촬영 명령을 넣고, 그때 생긴 흔적 이벤트의 id로 사진을 저장한다. 목록에 넣은 항목을 돌려준다."""
@@ -114,6 +121,20 @@ class Driver:
         item = {"event_id": ev.id, "url": f"/photos/{name}", "t": ev.ts, "xy": [round(ev.geom.xy[0], 1), round(ev.geom.xy[1], 1)]}
         self.photos.append(item)
         return item
+
+    # ── 3D 보기·살아 있는 과학 가치 레이어 (rover/console_map.py) ──
+    def height(self) -> dict:
+        if self._height is None:
+            self._height = console_map.height_grid(self.sim.rover.bundle)
+        return self._height
+
+    def science_png(self, kind: str) -> bytes:
+        rover = self.sim.rover
+        key = (rover.science_rev, kind)
+        if key not in self._png:
+            self._png = {k: v for k, v in self._png.items() if k[0] == rover.science_rev}   # 옛 판의 그림은 버린다
+            self._png[key] = console_map.science_png(rover.core.science_view(), kind)
+        return self._png[key]
 
     def state(self) -> dict:
         s = self.sim
@@ -236,6 +257,27 @@ def make_app(bundle_root: str, scenario: str | None, speed: float, manual: bool)
         if not any(p["url"] == f"/photos/{name}" for p in drv.photos):    # 목록에 있는 이름만 내준다(경로를 따라 올라가지 못하게)
             raise HTTPException(404, "no such photo")
         return FileResponse(PHOTO_DIR / name, media_type="image/jpeg")
+
+    @app.get("/console/height.json")
+    async def console_height():
+        if drv.sim is None:
+            raise HTTPException(409, "no scenario is running")
+        return drv.height()
+
+    @app.get("/console/science_legend.json")
+    async def console_legend():
+        if drv.sim is None:
+            raise HTTPException(409, "no scenario is running")
+        return console_map.legend(drv.sim.rover.core.science_view(), drv.sim.meta["grade_bins"])
+
+    @app.get("/console/science.png")
+    async def console_science(kind: str = "expected"):
+        if drv.sim is None:
+            raise HTTPException(409, "no scenario is running")
+        if kind not in console_map.KINDS:
+            raise HTTPException(400, f"kind must be one of {list(console_map.KINDS)}")
+        # 주소에 판 번호(?v=science_rev)를 붙여 부르면 브라우저가 같은 그림을 다시 받지 않는다
+        return Response(drv.science_png(kind), media_type="image/png", headers={"Cache-Control": "no-cache"})
 
     @app.websocket("/ws/screen")
     async def ws_screen(ws: WebSocket):
