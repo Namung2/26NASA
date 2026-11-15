@@ -141,8 +141,9 @@ validation scenarios were written for `jezero_west_v1`.
 | Parente, Itoh, Saranathan 2021, Jezero crater mineral map | Mineral classes | CC BY 4.0 | https://doi.org/10.5281/zenodo.5575824 |
 | Smith 2022, Perseverance MEDA/TIRS aerosol retrievals | Dust optical depth for the weather replay and the dust threshold | CC BY 4.0 | https://doi.org/10.17632/48phhtkcj8.1 |
 
-The source of every numeric parameter is written next to its value in `config/params.yaml`.
-A value without a source is left empty instead of guessed.
+Every parameter in `config/params.yaml` is labelled with where its value comes from: a reference (`REF`, 12 values),
+a design decision (`DESIGN`, 17), or a tuning value chosen by the team (`TUNE`, 50). Two thresholds for which no
+reference was found are left empty (`TBD`) — for example the radiation dose warning, so dose is displayed only.
 
 ## Third-party code
 
