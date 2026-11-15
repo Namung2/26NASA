@@ -3,6 +3,9 @@
 A map-based decision companion for astronauts walking on Mars.
 Built for the NASA Space Apps Challenge 2026 (Seoul), challenge "Interplanetary Survival Guide: Martian Map".
 
+**Try it in a browser:** https://26nasa-production.up.railway.app/ — pick a map, a scenario, then a screen.
+The public server runs one simulation shared by everyone who has it open, and it sleeps when idle, so the first visit can take a moment.
+
 An EVA plan is made on Earth, but the moment that matters comes in the field: a rock that was not in the plan,
 a radio link that drops behind a ridge, dust that starts to rise. At that moment BingoTime raises one decision card
 with a few options and shows what each option costs on the same ruler — walking time, margin before the latest safe
