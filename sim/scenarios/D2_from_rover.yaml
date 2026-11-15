@@ -13,6 +13,8 @@
 # 관측·가설·링크의 순서와 간격은 D1과 같다. 화면을 붙여 돌릴 때는 가설과 선택을 사람이 직접 한다(아래 events의 hyp와 choices는 화면 없이 돌릴 때만 쓰인다).
 # 판정(expect)은 없다 — 통과 기준은 로버에 돌아오는 것이다. 검증은 V1·V2가 한다.
 scenario: D2_from_rover
+title: "Demo — full EVA from the rover"
+summary: "Starts at the rover at EVA 0. Walk P1 → P2 → P3 with an unexpected find, a hypothesis, link loss and recovery, then return to the rover."
 kind: D
 site: jezero_west_v1
 seed: 17

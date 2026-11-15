@@ -4,7 +4,7 @@
 // 화면이 스스로 하는 일은 카드 정렬과 레이어·패널 켜고 끄기뿐이다.
 // 구성: 위 = 계기 넷(다음 지점 · 출발 한계 · 링크 · 시각) / 가운데 = 지도(범례와 넣어 둔 가설이 얹힌다) / 지도 오른쪽에 뜬 조작 단추 줄(Dock) / 아래 = 결정 지점 카드
 // 모양은 shared/style.css에 있다. 여기서는 받은 값을 어느 자리에 놓을지만 정한다.
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { DecisionCards } from "../shared/DecisionCards";
 import { BINDING, approx, clock } from "../shared/i18n";
 import { Dock } from "../shared/Dock";
@@ -15,13 +15,13 @@ import { useMeta, type XY } from "../shared/meta";
 import { SimBar } from "../shared/SimBar";
 import { useSocket } from "../shared/socket";
 import { SourceTip } from "../shared/SourceTip";
-import type { ScreenCmd, Snapshot } from "../types";
+import type { ScreenCmd, Snapshot, Stop } from "../types";
 import { CameraPanel } from "./Camera";
 import { HypConfirmDialog, HypothesisMenu } from "./Hypothesis";
 import { MarkPanel, ObsPanel } from "./Panels";
 
 type Cmd = ScreenCmd["cmd"];
-type Panel = null | "obs" | "hyp" | "photo" | "mark" | "layers";
+type Panel = null | "obs" | "hyp" | "photo" | "mark" | "layers" | "plan";
 
 // 조작 단추의 그림. 뜻을 돕는 선 그림일 뿐이다
 const ICON: Record<string, JSX.Element> = {
@@ -30,6 +30,7 @@ const ICON: Record<string, JSX.Element> = {
   photo: <svg viewBox="0 0 24 24"><path d="M4 8h3l1.5-2.5h7L17 8h3v11H4z" /><circle cx="12" cy="13" r="3.5" /></svg>,
   mark: <svg viewBox="0 0 24 24"><path d="M12 21s-6.5-6-6.5-11a6.5 6.5 0 0113 0c0 5-6.5 11-6.5 11z" /><circle cx="12" cy="10" r="2.3" /></svg>,
   home: <svg viewBox="0 0 24 24"><path d="M9 14l-5-5 5-5" /><path d="M4 9h10a6 6 0 010 12h-3" /></svg>,
+  plan: <svg viewBox="0 0 24 24"><circle cx="5" cy="18" r="2.2" /><circle cx="12" cy="7" r="2.2" /><circle cx="19" cy="15" r="2.2" /><path d="M6.4 16.2l4.3-7.3M13.9 8.6l3.8 4.6" /></svg>,
   layers: <svg viewBox="0 0 24 24"><path d="M12 3l9 5-9 5-9-5z" /><path d="M3 13l9 5 9-5" /></svg>,
 };
 
@@ -44,17 +45,44 @@ export function FieldApp() {
   const [preview, setPreview] = useState<string | null>(null);     // 마우스를 올린 카드(그 카드의 경로만 지도에 미리 보인다)
   const dpId = snap?.dp?.dp_id ?? null;
   useEffect(() => setPreview(null), [dpId]);                        // 카드 묶음이 바뀌면 미리 보기를 지운다
+  // 가설 목표에 닿으면 관측 입력 창을 연다. 가설 목표는 거기서 관측을 남겨야 끝난다(코어의 규칙) — 그냥 지나가면 같은 목표가 다시 나온다.
+  // "닿았다"는 프로그램이 정해 보낸 것(스냅샷의 visited)이고, 화면은 그 목록이 늘어난 것을 보고 창을 열 뿐이다. 관측을 대신 넣지 않는다.
+  // 다른 창이 열려 있으면 건드리지 않는다. 화면을 처음 열었을 때 이미 다녀온 것에는 열지 않는다.
+  const reached = snap ? snap.visited.filter((v) => v.purpose === "hyp_target").length : null;
+  const seen = useRef<number | null>(null);
+  const [atTarget, setAtTarget] = useState(false);                  // 관측 창을 가설 목표 도착 때문에 열었는가(창에 한 줄 알림을 보인다)
+  useEffect(() => {
+    if (reached === null) return;
+    if (seen.current !== null && reached > seen.current) { setAtTarget(true); setPanel((cur) => cur ?? "obs"); }
+    seen.current = reached;
+  }, [reached]);
+  useEffect(() => { if (panel !== "obs") setAtTarget(false); }, [panel]);
+  // 경로 재설정: 지도에서 정지점을 차례로 눌러 순서를 짠다. 보낸다고 계획이 바뀌지 않는다 — 로버가 그 순서를 계산해
+  // "My plan" 카드로 다른 카드 옆에 띄우고, 그 카드를 골라야 바뀐다. 화면은 누른 순서를 모아 보낼 뿐이다(시간·경사·안전은 따지지 않는다)
+  const [planPicks, setPlanPicks] = useState<string[]>([]);
+  useEffect(() => { if (panel !== "plan") setPlanPicks([]); }, [panel]);
   const cmd = (c: Cmd) => send({ type: "command", cmd: c } satisfies ScreenCmd);
 
   if (!meta) return <div className="wait"><Loader label="Reading bundle metadata" /></div>;
   if (!snap) return <div className="wait"><Loader label={connected ? "Waiting for the first snapshot" : "Connecting to the device program"} /><SimBar /></div>;
   const s = snap.state, g = snap.gauge, n = snap.nlt, uhf = snap.channels.uhf, wifi = snap.channels.wifi;
   const draft = snap.hyp_draft;
+  // 누를 수 있는 정지점: 번들의 지점(P1…)과, 스냅샷에 실려 온 가설 목표(계획에 든 것과 떠 있는 카드의 것).
+  // 머무는 시간은 스냅샷에 그 정지점이 실려 있으면 그 값을 그대로 쓰고, 없으면 0으로 보낸다(계약의 기본값) — 화면이 시간을 지어내지 않는다
+  const known: Stop[] = [...snap.plan, ...snap.visited, ...(snap.dp?.options.flatMap((o) => o.stops) ?? [])];
+  const planCands: { key: string; stop: Stop; label: string }[] = [
+    ...meta.pois.map((q) => ({ key: q.id, label: q.name || q.id,
+      stop: { xy: q.xy, poi_id: q.id, purpose: "poi" as const, profile: "balanced" as const, dwell_min: known.find((k) => k.poi_id === q.id)?.dwell_min ?? 0 } })),
+    ...known.filter((k) => k.purpose === "hyp_target" && !k.poi_id).filter((k, i, a) => a.findIndex((x) => x.xy.join() === k.xy.join()) === i)
+      .map((k) => ({ key: `hyp:${k.xy.join()}`, label: "Hypothesis target", stop: { ...k, profile: "balanced" as const } })),
+  ];
+  const planStops = planPicks.map((k) => planCands.find((c) => c.key === k)).filter((c): c is (typeof planCands)[number] => !!c);
+  const togglePlan = (key: string) => setPlanPicks((cur) => (cur.includes(key) ? cur.filter((k) => k !== key) : cur.length < 8 ? [...cur, key] : cur));
 
   return (
     <div className="app field">
       <header className="top">
-        <div className="brand"><b>BINGOTIME</b><span>FIELD · {s.node}</span></div>
+        <div className="brand"><a href="/" title="Back to map and scenario selection"><b>BINGOTIME</b></a><span>FIELD · {s.node}</span></div>
         <div className="inst">
           <span className="inst-label">NEXT STOP</span>
           {g ? (
@@ -96,7 +124,8 @@ export function FieldApp() {
       <main className="mid">
         <MapView meta={meta} layersOn={layers} shadowBin={snap.shadow_bin} pos={s.pos as XY} sigma={snap.sigma_m} rover={s.rover_pos as XY | null}
           route={snap.route as XY[]} back={snap.return_rover as XY[]} track={snap.track as XY[]} visited={snap.visited} plan={snap.plan} traces={snap.traces} obs={snap.obs} hyps={snap.hyps}
-          options={snap.dp?.options.filter((o) => o.id === preview)} follow onPickHyp={togglePick} shownHyp={hoverHyp ?? pickedHyp} hideRoute={preview !== null} />
+          options={snap.dp?.options.filter((o) => o.id === preview)} follow onPickHyp={togglePick} shownHyp={hoverHyp ?? pickedHyp} hideRoute={preview !== null || panel === "plan"}
+          planning={panel === "plan" ? { candidates: planCands, picked: planPicks, onPick: togglePlan } : null} />
         <MapLegend track />
         {snap.hyps.length > 0 && (
           <div className="float hyplist">
@@ -115,12 +144,32 @@ export function FieldApp() {
           { key: "hyp", icon: ICON.hyp, label: "Hypo.", title: "Hypothesis", on: panel === "hyp", onClick: () => setPanel(panel === "hyp" ? null : "hyp") },
           { key: "photo", icon: ICON.photo, label: "Photo", on: panel === "photo", onClick: () => setPanel(panel === "photo" ? null : "photo") },
           { key: "mark", icon: ICON.mark, label: "Mark", title: "New site · Blocked", on: panel === "mark", onClick: () => setPanel(panel === "mark" ? null : "mark") },
+          { key: "plan", icon: ICON.plan, label: "Replan", title: "Replan — build your own stop order", on: panel === "plan", onClick: () => setPanel(panel === "plan" ? null : "plan") },
           { key: "layers", icon: ICON.layers, label: "Layers", on: panel === "layers", onClick: () => setPanel(panel === "layers" ? null : "layers") },
           { sep: true },
           { key: "home", icon: ICON.home, label: "Return", tone: "warm", onClick: () => cmd({ kind: "return" }) },
         ]} />
-        {panel === "obs" && <ObsPanel meta={meta} onSend={(c) => { cmd(c); setPanel(null); }} onClose={() => setPanel(null)} />}
+        {panel === "obs" && <ObsPanel meta={meta} hint={atTarget ? "You reached a hypothesis target. Leave an observation here to close it out — otherwise the same target can come up again." : undefined} onSend={(c) => { cmd(c); setPanel(null); }} onClose={() => setPanel(null)} />}
         {panel === "photo" && <CameraPanel onTraceOnly={() => { cmd({ kind: "photo" }); setPanel(null); }} onClose={() => setPanel(null)} />}
+        {panel === "plan" && (
+          <div className="panel">
+            <h3>Replan <small>— Click stops on the map in the order you want to visit them.</small></h3>
+            <p className="caution">This only sends the order. The rover works out the route and shows it as a “My plan” card next to the other cards. The plan changes only when you select that card.</p>
+            {planStops.length === 0 && <p className="none">No stops yet. Click a dashed ring on the map.</p>}
+            <ol className="planlist">
+              {planStops.map((c, i) => (
+                <li key={c.key}><b>{i + 1}</b><span>{c.label} <small>{c.stop.poi_id ?? `(${c.stop.xy[0]}, ${c.stop.xy[1]})`}</small></span>
+                  <button type="button" onClick={() => togglePlan(c.key)}>Remove</button></li>
+              ))}
+            </ol>
+            {s.link_mode === "LOCAL" && <p className="missing">The rover link is down. A plan can be compared only while the link is up.</p>}
+            <div className="row">
+              <button type="button" disabled={planStops.length === 0} onClick={() => { cmd({ kind: "plan", stops: planStops.map((c) => c.stop) }); setPanel(null); }}>Send to rover</button>
+              <button type="button" disabled={planStops.length === 0} onClick={() => setPlanPicks([])}>Clear</button>
+              <button type="button" onClick={() => setPanel(null)}>Close</button>
+            </div>
+          </div>
+        )}
         {panel === "mark" && <MarkPanel meta={meta} onSend={(c) => { cmd(c); setPanel(null); }} onClose={() => setPanel(null)} />}
         {panel === "hyp" && <HypothesisMenu meta={meta} draft={draft} onSubmit={(c) => { cmd(c); setPanel(null); }} onClose={() => setPanel(null)} />}
         {panel === "layers" && <div className="panel"><h3>Layers</h3><LayerPanel meta={meta} on={layers} setOn={setLayers} shadowBin={snap.shadow_bin} /><div className="row"><button type="button" onClick={() => setPanel(null)}>Close</button></div></div>}

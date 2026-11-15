@@ -30,6 +30,7 @@ export interface MapProps {
   onPickObs?: (id: string) => void;
   onPickHyp?: (id: string) => void;
   hideRoute?: boolean;                      // "다음에 갈 곳" 선을 잠깐 숨긴다 — 카드의 경로를 미리 보는 동안 두 선이 섞여 보이지 않게
+  planning?: { candidates: { key: string; stop: Stop; label: string }[]; picked: string[]; onPick: (key: string) => void } | null;   // 경로 재설정: 누를 수 있는 정지점과, 지금까지 누른 순서
   shownHyp?: string | null;                 // 점선(방향·범위)을 보일 가설. 지도의 H 표식에 마우스를 올린 가설도 함께 보인다
 }
 
@@ -105,8 +106,9 @@ export function MapView(p: MapProps) {
   const [hoverHyp, setHoverHyp] = useState<string | null>(null);   // 지도의 H 표식 위에 마우스가 올라가 있는 가설
   const me = useRef<{ marker: L.Marker; circle: L.Circle } | null>(null);
   const fixed = useRef<L.LayerGroup | null>(null);
-  const picks = useRef({ obs: p.onPickObs, hyp: p.onPickHyp });
-  picks.current = { obs: p.onPickObs, hyp: p.onPickHyp };
+  const picks = useRef({ obs: p.onPickObs, hyp: p.onPickHyp, plan: p.planning?.onPick });
+  picks.current = { obs: p.onPickObs, hyp: p.onPickHyp, plan: p.planning?.onPick };
+  const planLayer = useRef<L.LayerGroup | null>(null);
 
   // 지도 만들기 (한 번)
   useEffect(() => {
@@ -120,6 +122,7 @@ export function MapView(p: MapProps) {
     fixed.current = L.layerGroup().addTo(m);
     hypLines.current = L.layerGroup().addTo(m);
     dyn.current = L.layerGroup().addTo(m);
+    planLayer.current = L.layerGroup().addTo(m);
     L.control.scale({ imperial: false }).addTo(m);
     // 결정 지점 카드가 뜨고 내려가면 지도 칸의 크기가 바뀐다 — 그때마다 지도에 알려 빈 띠가 생기지 않게 한다
     const ro = new ResizeObserver(() => m.invalidateSize({ animate: false }));
@@ -270,8 +273,44 @@ export function MapView(p: MapProps) {
     }
     me.current.marker.setLatLng(ll(p.pos));
     me.current.circle.setLatLng(ll(p.pos)).setRadius(Math.max(1, p.sigma ?? 0));
-    if (p.follow && !m.getBounds().pad(-0.25).contains(ll(p.pos))) m.panTo(ll(p.pos));
+    if (p.follow && !p.planning && !m.getBounds().pad(-0.25).contains(ll(p.pos))) m.panTo(ll(p.pos));   // 순서를 짜는 동안에는 지도를 끌고 가지 않는다
   }, [p.pos?.[0], p.pos?.[1], p.sigma, p.follow]);
+
+  // 경로 재설정(사람이 정지점 순서를 직접 짠다). 누를 수 있는 정지점에 고리를 얹고, 누른 순서대로 번호를 매겨 흐르는 선으로 잇는다.
+  // 이 선은 "순서"만 보인다(곧은 선) — 실제로 걷는 길과 시간·경사는 보낸 뒤 로버가 계산해 카드로 돌려준다. 화면은 순서를 모을 뿐이다
+  const planKey = JSON.stringify([p.planning?.candidates.map((c) => [c.key, c.stop.xy]), p.planning?.picked, p.planning ? p.pos : null]);
+  useEffect(() => {
+    const g = planLayer.current;
+    if (!g) return;
+    g.clearLayers();
+    const pl = p.planning;
+    if (!pl) return;
+    const at = new Map(pl.candidates.map((c) => [c.key, c]));
+    const chain = [...(p.pos ? [ll(p.pos)] : []), ...pl.picked.map((k) => at.get(k)).filter((c): c is NonNullable<typeof c> => !!c).map((c) => ll(c.stop.xy as XY))];
+    if (chain.length > 1) {
+      const c = MAP_COLOR.preview;
+      line(g, chain, { color: c, weight: 3, opacity: 0.9, dashArray: "2 7" });
+      L.polyline(chain, { className: "flow flow-glow", color: c, weight: 11, opacity: 0.45, interactive: false }).addTo(g);
+      L.polyline(chain, { className: "flow", color: "#ffffff", weight: 4.5, opacity: 1, interactive: false }).addTo(g);
+    }
+    for (const c of pl.candidates) {
+      const n = pl.picked.indexOf(c.key);
+      const icon = L.divIcon({ className: "", iconSize: [40, 40], iconAnchor: [20, 20], html: `<div class="mk plan${n >= 0 ? " picked" : ""}">${n >= 0 ? n + 1 : "+"}</div>` });
+      const mk = L.marker(ll(c.stop.xy as XY), { icon, zIndexOffset: 2000 }).bindTooltip(n >= 0 ? `${c.label} — stop ${n + 1}. Click to take it out` : `${c.label} — click to add as the next stop`);
+      mk.on("click", () => picks.current.plan?.(c.key));
+      mk.addTo(g);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [planKey]);
+  // 순서 짜기를 시작하면 누를 수 있는 정지점과 현재 위치가 한눈에 들어오게 지도를 맞춘다(오른쪽의 창에 가리지 않게 여백을 둔다)
+  const planningOn = !!p.planning;
+  useEffect(() => {
+    const m = map.current, pl = p.planning;
+    if (!m || !pl || pl.candidates.length === 0) return;
+    const pts = [...pl.candidates.map((c) => ll(c.stop.xy as XY)), ...(p.pos ? [ll(p.pos)] : [])];
+    m.fitBounds(L.latLngBounds(pts), { paddingTopLeft: [60, 50], paddingBottomRight: [Math.min(470, m.getSize().x * 0.45), 50], maxZoom: 4 });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [planningOn]);
 
   return <div ref={el} className="map" />;
 }

@@ -4,13 +4,14 @@ import { useState } from "react";
 import { paramList, type Meta } from "../shared/meta";
 import type { CmdMark, CmdObs } from "../types";
 
-export function ObsPanel({ meta, onSend, onClose }: { meta: Meta; onSend: (c: CmdObs) => void; onClose: () => void }) {
+export function ObsPanel({ meta, hint, onSend, onClose }: { meta: Meta; hint?: string; onSend: (c: CmdObs) => void; onClose: () => void }) {
   const [confirmed, setConfirmed] = useState(false);
   const [note, setNote] = useState("");
   const max = Number(meta.params.find((p) => p.key === "menu.note_max_chars")?.value ?? 200);
   return (
     <div className="panel">
       <h3>Observation</h3>
+      {hint && <p className="caution">{hint}</p>}
       <label><input type="checkbox" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} /> Re-checked</label>
       <textarea placeholder="Free note (optional) — saved exactly as typed" maxLength={max} value={note} onChange={(e) => setNote(e.target.value)} />
       <div className="row">

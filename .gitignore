@@ -5,6 +5,7 @@ __pycache__/
 *.pyc
 .pytest_cache/
 .ruff_cache/
+*.egg-info/
 node_modules/
 screen/dist/
 .claude/
@@ -13,10 +14,11 @@ screen/dist/
 data/raw/
 data/bundles/
 *.zip
-# 밖에서 가져온 디자인 참고 코드 (올리지 않는다. 없어도 빌드된다 — screen/src/home/main.tsx)
-screen/src/vendor/
 # 현장 화면에서 찍은 사진 (기기에 두는 것. 사람이 찍힐 수 있다)
 photos_live/
+# React Bits에서 받은 참고 코드 가운데 화면에서 쓰지 않는 것. 그 라이선스(MIT + Commons Clause)는 컴포넌트만 따로 다시 나눠 주는 것을
+# 막으므로 올리지 않는다. 화면에서 실제로 쓰는 것만 screen/src/vendor/ 에 둔다
+screen/vendor_reference/
 # 개인 작업 흔적
 .backup_*/
 docs.zip

@@ -4,6 +4,8 @@
 # 아폴로 17의 착륙선이 여기서는 로버다. 출발 한계는 맞춰 넣지 않고 시간 규칙에서 나온다(코어의 bt_depart_limit).
 # 지점(P1, P2, P3)과 주차점은 번들의 배치를 이름으로 가리킨다(scripts/place_scenario.py가 놓은 것).
 scenario: V1_apollo17_station4
+title: "Validation — Apollo 17 Station 4 sequence"
+summary: "Replays the order of events of Apollo 17 EVA-2 Station 4: arrival, an unexpected find, a hypothesis, a choice, the departure limit, and return."
 kind: V
 site: jezero_west_v1
 seed: 17

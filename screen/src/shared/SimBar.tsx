@@ -1,7 +1,8 @@
 // 시뮬레이터 조작 막대 — 보여 주기·개발 전용이다(S5 §6). 실제 기기의 화면에는 없다.
-// 서버(/sim/*)가 없으면 아무것도 그리지 않는다.
+// 서버(/sim/*)가 없으면 아무것도 그리지 않는다. 첫 화면에서 Live를 골라 두었으면 감춘다(shared/mode.ts).
 import { useEffect, useState } from "react";
 import { clock } from "./i18n";
+import { getMode } from "./mode";
 
 interface SimState { scenario: string; speed: number; manual: boolean; running: boolean; t: number; home: boolean; link: Record<string, string | null>; scenarios: string[] }
 
@@ -19,10 +20,11 @@ export function SimBar() {
     const id = window.setInterval(load, 1000);
     return () => window.clearInterval(id);
   }, []);
-  if (!s) return null;
+  if (!s || getMode() === "live") return null;
   const lost = s.link.uhf === "LOST";
   return (
     <div className="simbar">
+      <a href="/" title="Back to map and scenario selection">← Home</a><span className="sep" />
       <b>Simulator controls</b><small>(demo only)</small>
       <select value={name || s.scenario} onChange={(e) => setName(e.target.value)}>{s.scenarios.map((x) => <option key={x}>{x}</option>)}</select>
       <label><input type="checkbox" checked={manual} onChange={(e) => setManual(e.target.checked)} /> Manual input</label>

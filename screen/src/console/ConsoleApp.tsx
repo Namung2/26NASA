@@ -4,7 +4,7 @@
 // 현장 화면과 마찬가지로 판단이 없다: ConsoleSnapshot을 그리고 누른 것을 ConsoleCmd로 보낸다.
 // 구성: 위 = 계기 넷(시각 · 밖에 나간 우주인 · 출발 한계 · 환경) / 왼쪽 = 레이어 · 지점 · 바탕표 / 가운데 = 지도 / 오른쪽 = 후보 비교 · 고도 단면 · 메모와 가설 · 최근 결정 지점
 // 모양은 shared/style.css에 있다. 여기서는 받은 값을 어느 자리에 놓을지만 정한다.
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { BINDING, approx, clock } from "../shared/i18n";
 import { DEFAULT_LAYERS, LayerPanel } from "../shared/LayerPanel";
 import { Loader } from "../shared/Loader";
@@ -17,6 +17,9 @@ import type { ConsoleCmd, ConsoleSnapshot } from "../types";
 import { ElevationProfile, OptionCompare } from "./OptionCompare";
 import { HypForm, MemoList, PoiList, PriorPanel } from "./Lists";
 
+// 3D 지형 보기는 3D를 켤 때만 불러온다(three.js가 크다 — 2D만 쓰는 동안에는 받지 않는다)
+const Terrain3D = lazy(() => import("./Terrain3D"));
+
 export function ConsoleApp() {
   const meta = useMeta();
   const { snap, connected, send } = useSocket<ConsoleSnapshot>("/ws/console");
@@ -24,6 +27,7 @@ export function ConsoleApp() {
   const [shown, setShown] = useState<string | null>(null);        // 후보 표에서 고른 줄(지도에 그 경로를, 아래에 고도 단면을 보인다)
   const [anchor, setAnchor] = useState<string | null>(null);      // 가설의 기준으로 고른 관측
   const [tab, setTab] = useState<"layers" | "pois" | "prior">("layers");
+  const [view, setView] = useState<"2d" | "3d">("2d");            // 지도 칸의 보기. 바꿔도 고른 줄·기준 관측은 그대로다
 
   if (!meta) return <div className="wait"><Loader label="Reading bundle metadata" /></div>;
   if (!snap) return <div className="wait"><Loader label={connected ? "Waiting for the first snapshot" : "Connecting to the rover program"} /><SimBar /></div>;
@@ -34,7 +38,7 @@ export function ConsoleApp() {
   return (
     <div className="app console">
       <header className="top">
-        <div className="brand"><b>BINGOTIME</b><span>ROVER CONSOLE · {meta.bundle_id}</span></div>
+        <div className="brand"><a href="/" title="Back to map and scenario selection"><b>BINGOTIME</b></a><span>ROVER CONSOLE · {meta.bundle_id}</span></div>
         <div className="inst">
           <span className="inst-label">TIME</span>
           <div className="inst-read"><b className="num">{clock(snap.t)}</b><span className="chip plain">LMST {snap.lmst}</span></div>
@@ -70,9 +74,22 @@ export function ConsoleApp() {
           {tab === "prior" && <PriorPanel meta={meta} />}
         </aside>
         <div className="mapwrap">
-          <MapView meta={meta} layersOn={layers} shadowBin={snap.shadow_bin} pos={(st?.pos as XY | undefined) ?? null} sigma={st?.sigma} rover={snap.rover_pos as XY | null}
-            route={c.route as XY[]} plan={c.plan} traces={snap.traces} obs={snap.obs} hyps={snap.hyps} options={onMap} onPickObs={setAnchor} />
-          <MapLegend back={false} />
+          {view === "2d" ? (
+            <>
+            <MapView meta={meta} layersOn={layers} shadowBin={snap.shadow_bin} pos={(st?.pos as XY | undefined) ?? null} sigma={st?.sigma} rover={snap.rover_pos as XY | null}
+              route={c.route as XY[]} plan={c.plan} traces={snap.traces} obs={snap.obs} hyps={snap.hyps} options={onMap} onPickObs={setAnchor} />
+            <MapLegend back={false} />
+            </>
+          ) : (
+            <Suspense fallback={<div className="wait"><Loader label="Loading the 3D view" /></div>}>
+              <Terrain3D meta={meta} rev={snap.science_rev} layersOn={layers} shadowBin={snap.shadow_bin} pos={(st?.pos as XY | undefined) ?? null} rover={snap.rover_pos as XY | null}
+                plan={c.plan} route={c.route as XY[]} option={picked} obs={snap.obs} />
+            </Suspense>
+          )}
+          <div className="float viewswitch" role="group" aria-label="Map view">
+            <button type="button" className={view === "2d" ? "on" : ""} onClick={() => setView("2d")}>2D</button>
+            <button type="button" className={view === "3d" ? "on" : ""} onClick={() => setView("3d")}>3D</button>
+          </div>
         </div>
         <aside className="right">
           <section className="sec">

@@ -1,7 +1,7 @@
 // 화면의 글자. 문장(카드 머리줄, 알림, 되읽기)은 프로그램이 만들어 스냅샷에 실어 보내고, 여기에는 칸의 이름표만 둔다.
 // 금지어(R-52): 추천·권장·최적 같은 말을 여기에 두지 않는다.
 export const LABEL: Record<string, string> = {
-  continue_plan: "Keep plan", hyp_target: "Hypothesis target", restore_plan: "Back to earlier plan", drop_last: "Drop last stop", stay: "Stay here", return_rover: "Return to rover",
+  continue_plan: "Keep plan", route_fastest: "Fastest route", route_gentle: "Gentlest route", hyp_target: "Hypothesis target", custom_plan: "My plan", restore_plan: "Back to earlier plan", drop_last: "Drop last stop", stay: "Stay here", return_rover: "Return to rover",
 };
 export const KIND: Record<string, string> = { route: "Traverse", stay: "Stay", return: "Return" };
 export const GRADE: Record<string, string> = { LOW: "Low", MED: "Medium", HIGH: "High" };

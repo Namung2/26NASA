@@ -4,6 +4,8 @@
 # 그 뒤로는 선택지 정지와 대기 건수. 그래서 V1과 따로 검증한다. 지형·주차점·시작 조건은 V1과 같다.
 # 끊긴 동안에도 귀환 경로와 출발 한계는 EVA 전에 받은 귀환 지도로 계속 나와야 한다.
 scenario: V2_link_loss
+title: "Validation — link loss"
+summary: "Same terrain and start as V1. Checks the screens while the rover link is down: local mode, paused options, and the return route kept on screen."
 kind: V
 site: jezero_west_v1
 seed: 17

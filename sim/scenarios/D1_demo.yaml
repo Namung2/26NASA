@@ -4,6 +4,8 @@
 # 화면 없이 돌릴 때는 가설과 선택을 아래 events/choices가 대신 넣는다. 화면을 붙여 돌릴 때는 사람이 직접 한다.
 # 판정(expect)은 없다 — 통과 기준은 완주이고, 끊김 장면의 판정은 V2가 한다. timing은 단계별 응답 시간을 리포트로만 낸다.
 scenario: D1_demo
+title: "Demo — mid-EVA discovery"
+summary: "Starts 4 h 40 min into the EVA at P1. Arrive at P2, an unexpected find, a hypothesis, link loss and recovery, then the departure limit and return to the rover."
 kind: D
 site: jezero_west_v1
 seed: 17

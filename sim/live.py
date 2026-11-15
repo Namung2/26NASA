@@ -14,6 +14,7 @@
   GET  /console/science.png?kind=…   지금의 과학 가치 지도를 색 입힌 그림. kind: expected | max | base | var
   GET  /console/science_legend.json  그 그림의 색 눈금·등급 경계·놓임 (rover/console_map.py)
   GET  /sim/state         지금 도는 시나리오·배속·시각 (시뮬레이터 조작 막대용)
+  GET  /sim/catalog       고르는 화면용: 지도(번들)와 그 지도의 시나리오 목록, 지금 도는 것
   POST /sim/start         {scenario, speed, manual}   manual = true면 가설 입력과 카드 선택을 사람이 한다
   POST /sim/speed         {speed}                     0 = 멈춤
   POST /sim/link          {ch, state}                 state: LOST | AUTO   (데모의 링크 버튼)
@@ -149,6 +150,24 @@ class Driver:
             self._png[key] = console_map.science_png(rover.core.science_view(), kind)
         return self._png[key]
 
+    def catalog(self) -> dict:
+        """고르는 화면(첫 화면)에 보일 것: 지도(번들)마다 그 지도에서 도는 시나리오. 글과 숫자는 번들 메타와 시나리오 파일에 적힌 그대로다.
+
+        이 서버는 켤 때 받은 번들 하나만 올린다. 번들 폴더 옆에 다른 번들이 있으면 목록에는 보이되 loaded = false로 알린다(고를 수 없다).
+        """
+        here = Path(self.bundle_root).resolve()
+        scenarios = [load_scenario(p) for p in sorted(SCENARIO_DIR.glob("*.yaml"))]
+        maps = []
+        for d in sorted(q for q in here.parent.iterdir() if (q / "meta.json").exists()):
+            meta = json.loads((d / "meta.json").read_text().replace("NaN", "null"))
+            loaded = d == here
+            maps.append({"id": meta["bundle_id"], "site": meta["site"], "extent_m": meta["extent_m"], "pois": len(meta.get("pois", [])), "loaded": loaded,
+                         "thumb": "/bundle/tiles/hillshade/0/0/0.png" if loaded else None,
+                         "scenarios": [{"id": s.scenario, "kind": s.kind, "title": s.title or s.scenario, "summary": s.summary,
+                                        "start_min": s.start.eva_elapsed_min, "stops": s.poi_plan}
+                                       for s in scenarios if s.site == meta["bundle_id"]]})
+        return {"maps": maps, "running": self.state()}
+
     def state(self) -> dict:
         s = self.sim
         return {"scenario": self.name, "speed": self.speed, "manual": self.manual, "running": s is not None and not s.done(),
@@ -213,6 +232,10 @@ def make_app(bundle_root: str, scenario: str | None, speed: float, manual: bool)
     @app.get("/sim/state")
     async def sim_state():
         return drv.state()
+
+    @app.get("/sim/catalog")
+    async def sim_catalog():
+        return drv.catalog()
 
     @app.post("/sim/start")
     async def sim_start(b: StartBody):

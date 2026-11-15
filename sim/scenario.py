@@ -49,6 +49,8 @@ class Scenario(_M):
     scenario: str
     kind: Literal["V", "D"]
     site: str                             # 번들 id
+    title: str = ""                       # 고르는 화면에 보일 이름(영어). 없으면 scenario를 그대로 보인다
+    summary: str = ""                     # 고르는 화면에 보일 한두 문장(영어). 무슨 일이 어떤 순서로 일어나는지
     seed: int = 17
     nodes: list[str] = ["suit-A"]
     start: Start = Start()
