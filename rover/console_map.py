@@ -89,16 +89,24 @@ def height_grid(bundle, step_m: float = HEIGHT_STEP_M) -> dict:
     a, lay = bundle.layers["elev"]
     h, w = lay["shape"]
     z = np.asarray(a).reshape(h, w)
-    if z.dtype == np.uint16:
-        z = np.where(z == lay.get("nodata", 65535), np.nan, z.astype(np.float64) * float(lay.get("scale", 1.0)) + float(lay.get("offset", 0.0)))
-    else:
-        z = z.astype(np.float64)
     f = max(1, round(step_m / float(lay["res_m"])))
     hh, ww = h // f, w // f
-    blocks = z[: hh * f, : ww * f].reshape(hh, f, ww, f)
-    with np.errstate(invalid="ignore"):
-        cnt = np.isfinite(blocks).sum(axis=(1, 3))
-        mean = np.where(cnt > 0, np.nansum(blocks, axis=(1, 3)) / np.maximum(cnt, 1), np.nan)
+    # 줄 묶음으로 나눠 계산한다. 로버 쪽 고도 레이어는 2500 × 2500 칸이라, 통째로 float64로 바꾸고 nansum까지 하면 잠깐 100 MB쯤이 더 든다 —
+    # 메모리 512 MB짜리 서버가 3D 보기를 여는 순간 죽었다(2026-11-15 배포에서 확인). 한 번에 CHUNK 줄(줄인 격자 기준)만 다루면 몇 MB로 끝난다.
+    # 값은 통째로 계산한 것과 같다(칸마다 그 칸에 드는 원본 칸들의 평균).
+    mean = np.empty((hh, ww), dtype=np.float64)
+    CHUNK = 16
+    for i0 in range(0, hh, CHUNK):
+        i1 = min(hh, i0 + CHUNK)
+        part = z[i0 * f: i1 * f, : ww * f]
+        if part.dtype == np.uint16:
+            part = np.where(part == lay.get("nodata", 65535), np.nan, part.astype(np.float64) * float(lay.get("scale", 1.0)) + float(lay.get("offset", 0.0)))
+        else:
+            part = part.astype(np.float64)
+        blocks = part.reshape(i1 - i0, f, ww, f)
+        with np.errstate(invalid="ignore"):
+            cnt = np.isfinite(blocks).sum(axis=(1, 3))
+            mean[i0:i1] = np.where(cnt > 0, np.nansum(blocks, axis=(1, 3)) / np.maximum(cnt, 1), np.nan)
     res = float(lay["res_m"]) * f
     flat = [None if not np.isfinite(v) else round(float(v), 1) for v in mean.reshape(-1)]
     return {"res_m": res, "shape": [int(hh), int(ww)], "extent_m": [ww * res, hh * res],
