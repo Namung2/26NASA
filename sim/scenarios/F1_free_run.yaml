@@ -1,0 +1,28 @@
+# F1 — 자유 실행: 대본이 없는 시나리오 (docs/spec/S5 §4의 형식)
+#
+# 다른 시나리오는 "언제 무슨 일이 생기는가"(events)를 적어 둔다 — 예상 밖의 발견, 가설, 연결 끊김, 귀환. 이 파일에는 그것이 하나도 없다.
+# 로버 옆에서 EVA 0분에 계획(P1 → P2 → P3)만 들고 시작하고, 그 뒤의 일은 화면 앞의 사람이 한다:
+#   관측 남기기(Observe), 가설 넣기(Hypo.), 계획 다시 짜기(Replan), 새 지점·막힌 곳 표시(Mark), 사진(Photo), 귀환(Return), 카드 고르기.
+# 그래도 시뮬레이터가 만드는 것은 셋이다 — 실제 기기와 센서가 없기 때문이다:
+#   · 걷기: 승무원은 지금 계획의 다음 지점으로 걸어간다(계획 속도, 경사에 따라 달라짐). 계획이 끝나면 그 자리에 선다.
+#   · 날씨: 번들에 든 실제 하루치 기록(Perseverance sol 313)이 시각에 맞춰 나온다 — 11시쯤부터 먼지가 짙어진다.
+#   · 링크: 로버가 보이는지(지형)와 거리로 정해진다. 화면의 "Cut link"로 끊어 볼 수도 있다.
+# 카드는 그 결과로 코어가 낼 때만 뜬다(먼지, 연결, 출발 한계, 사람이 남긴 관측·가설·요청).
+#
+# 화면 없이 돌릴 때(sim.runner)는 아무도 누르지 않으므로 P3에서 서 있다가 출발 한계에 걸려 돌아온다 — 아래 choices 한 줄이 그때의 귀환 카드를 고른다.
+# 판정(expect)은 없다.
+scenario: F1_free_run
+title: "Free run — nothing scripted"
+summary: "Starts at the rover at EVA 0 with the plan P1 → P2 → P3. No event is scripted: you log observations, state hypotheses, replan, and choose cards yourself. Walking, the recorded weather of sol 313 and the radio link are simulated."
+kind: D
+site: jezero_west_v1
+seed: 17
+nodes: [suit-A]
+start:
+  eva_elapsed_min: 0
+  rover_park: park1
+poi_plan: [P1, P2, P3]
+dwell_min: {P1: 20, P2: 34, P3: 20}
+events: []
+choices:
+  - {when: {trigger: safety}, pick: {label_key: return_rover}}

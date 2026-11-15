@@ -114,6 +114,7 @@ Tests:
 | `V2_link_loss.yaml` | Validation. Same terrain and start as V1, with the rover link down for part of the walk |
 | `D1_demo.yaml` | Demonstration. Starts 4 h 40 min into the EVA: an unexpected find, a hypothesis, link loss and recovery, the departure limit, return to the rover |
 | `D2_from_rover.yaml` | Demonstration. Starts at the rover at EVA 0 and walks P1 → P2 → P3, then returns |
+| `F1_free_run.yaml` | Free run. Starts at the rover at EVA 0 with the plan P1 → P2 → P3 and scripts nothing: observations, hypotheses, replanning and card choices are made by the person at the screen. Walking, the recorded weather and the radio link are simulated |
 
 Scenarios point at stops by name (P1, P2, P3) and at the rover park, so they also run on the other maps
 (`sim.runner --bundle data/bundles/<id> --any-site`). All four finish on all three maps. The pass/fail checks in the
