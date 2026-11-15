@@ -31,6 +31,25 @@ const KIND: Record<string, string> = { D: "DEMO", V: "VALIDATION" };
 const siteName = (s: string) => s.replace(/_/g, " ").toUpperCase();
 const km = (m: number) => `${m / 1000} km`;
 
+// 궤도에 도는 그림: 그 지도의 음영 기복 타일 위에 지도 이름을 적은 한 장. 지형 그림만으로는 지도끼리 구별이 안 돼서 이름을 그림 안에 넣는다.
+// 궤도 컴포넌트(OrbitImages)는 그림 주소만 받으므로, 여기서 타일과 글자를 한 장으로 합쳐 그 주소를 넘긴다. 글자는 번들 메타의 site 그대로다
+const BADGE_PX = 320;
+async function mapBadge(thumb: string, name: string): Promise<string> {
+  const im = await new Promise<HTMLImageElement | null>((done) => { const i = new Image(); i.onload = () => done(i); i.onerror = () => done(null); i.src = thumb; });
+  await document.fonts.load(`600 40px "Cormorant Garamond Variable"`).catch(() => undefined);
+  const c = document.createElement("canvas"); c.width = c.height = BADGE_PX;
+  const x = c.getContext("2d")!;
+  if (im) x.drawImage(im, 0, 0, BADGE_PX, BADGE_PX); else { x.fillStyle = "#2b2824"; x.fillRect(0, 0, BADGE_PX, BADGE_PX); }
+  x.fillStyle = "rgba(4, 4, 5, 0.56)"; x.fillRect(0, 0, BADGE_PX, BADGE_PX);          // 글자가 읽히게 지형을 어둡게 누른다
+  const words = name.split(" "), last = words.pop() ?? "", head = words.join(" ");   // "JEZERO FLOOR" → 작은 윗줄 "JEZERO", 큰 아랫줄 "FLOOR"
+  x.textAlign = "center"; x.textBaseline = "middle"; x.fillStyle = "#efe8dc";
+  if (head) { x.font = `700 22px "Inter Variable", system-ui, sans-serif`; x.fillText(head.split("").join("\u200a\u200a"), BADGE_PX / 2, BADGE_PX / 2 - 38); }
+  let size = 76; x.font = `600 ${size}px "Cormorant Garamond Variable", Georgia, serif`;
+  while (size > 30 && x.measureText(last).width > BADGE_PX * 0.74) { size -= 4; x.font = `600 ${size}px "Cormorant Garamond Variable", Georgia, serif`; }
+  x.fillText(last, BADGE_PX / 2, BADGE_PX / 2 + (head ? 16 : 0));
+  return c.toDataURL("image/jpeg", 0.9);
+}
+
 // 두 가지 가운데 하나를 고르는 스위치
 function ModeSwitch({ mode, onChange }: { mode: Mode; onChange: (m: Mode) => void }) {
   const live = mode === "live";
@@ -70,6 +89,16 @@ function Home() {
   const changeMode = (m: Mode) => { setMode(m); setModeState(m); };
 
   const orbiting = cat?.maps.filter((m) => m.loaded && m.thumb) ?? [];
+  // 지도마다 이름을 적은 그림을 한 번 만들어 둔다(지도 목록이 바뀔 때만 다시 만든다)
+  const [badges, setBadges] = useState<Record<string, string>>({});
+  const orbitKey = orbiting.map((m) => m.id).join(",");
+  useEffect(() => {
+    let gone = false;
+    void Promise.all(orbiting.map(async (m) => [m.id, await mapBadge(m.thumb!, siteName(m.site))] as const)).then((all) => { if (!gone) setBadges(Object.fromEntries(all)); });
+    return () => { gone = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orbitKey]);
+  const ready = orbiting.length > 0 && orbiting.every((m) => badges[m.id]);
   return (
     <div className="home">
       {/* 바탕: 지도와 시나리오를 고르는 동안은 별, 화면을 고르는 걸음에서는 등고선 */}
@@ -91,10 +120,10 @@ function Home() {
       {cat && step === "map" && (
         <main className="home-mid">
           <div className="home-orbit">
-            <OrbitImages images={orbiting.map((m) => ({ src: m.thumb, alt: `Map ${siteName(m.site)}` }))} shape="ellipse" baseWidth={1000} radiusX={380} radiusY={120} rotation={-8}
-              duration={48} itemSize={132} itemRadius={66} showPath pathColor="rgba(239,232,220,0.22)" pathWidth={1} hoverScale={1.1} shadow={0.5}
+            {ready && <OrbitImages images={orbiting.map((m) => ({ src: badges[m.id], alt: `Map ${siteName(m.site)}` }))} shape="ellipse" baseWidth={1000} radiusX={380} radiusY={120} rotation={-8}
+              duration={48} itemSize={156} itemRadius={78} showPath pathColor="rgba(239,232,220,0.22)" pathWidth={1} hoverScale={1.1} shadow={0.5}
               onItemClick={(i: number) => { setMapId(orbiting[i].id); setStep("scenario"); }}
-              centerContent={<div className="home-center"><h1>Choose a map</h1><p>Each body in orbit is one map loaded on this program.</p></div>} />
+              centerContent={<div className="home-center"><h1>Choose a map</h1><p>Each body in orbit is one map loaded on this program.</p></div>} />}
           </div>
           <ul className="home-maps">
             {cat.maps.map((m) => (

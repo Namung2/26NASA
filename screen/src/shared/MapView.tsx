@@ -109,6 +109,7 @@ export function MapView(p: MapProps) {
   const picks = useRef({ obs: p.onPickObs, hyp: p.onPickHyp, plan: p.planning?.onPick });
   picks.current = { obs: p.onPickObs, hyp: p.onPickHyp, plan: p.planning?.onPick };
   const planLayer = useRef<L.LayerGroup | null>(null);
+  const steady = useRef<{ back: L.Polyline; trackCase: L.Polyline; track: L.Polyline; routeCase: L.Polyline; route: L.Polyline } | null>(null);   // 늘 보이는 선 셋. 한 번 만들어 두고 점만 바꾼다
 
   // 지도 만들기 (한 번)
   useEffect(() => {
@@ -121,13 +122,24 @@ export function MapView(p: MapProps) {
     map.current = m;
     fixed.current = L.layerGroup().addTo(m);
     hypLines.current = L.layerGroup().addTo(m);
+    // 늘 보이는 선(귀환 경로, 걸어온 길, 다음에 갈 곳)은 한 번 만들어 두고 점만 갈아 끼운다. 걸을 때마다(몇 초에 한 번) 걸어온 길에 점이 늘고
+    // 귀환 경로가 바뀌는데, 그때마다 지도 위의 것을 전부 지웠다 다시 그리면 화면이 깜빡이고 흐르는 빛도 처음부터 다시 시작한다
+    const lines = L.layerGroup().addTo(m);
+    const casing = (w: number) => L.polyline([], { color: MAP_COLOR.casing, weight: w + 3, opacity: 0.55, interactive: false });
+    steady.current = {
+      back: L.polyline([], { color: MAP_COLOR.back, weight: 9, opacity: 0.5, lineCap: "round", lineJoin: "round" }).bindTooltip("Return route to rover").addTo(lines),
+      trackCase: casing(2.5).addTo(lines),
+      track: L.polyline([], { color: MAP_COLOR.track, weight: 2.5, opacity: 0.95 }).bindTooltip("Path walked").addTo(lines),
+      routeCase: casing(3).addTo(lines),
+      route: L.polyline([], { color: MAP_COLOR.route, weight: 3, opacity: 1 }).bindTooltip("Route to the next stop").addTo(lines),
+    };
     dyn.current = L.layerGroup().addTo(m);
     planLayer.current = L.layerGroup().addTo(m);
     L.control.scale({ imperial: false }).addTo(m);
     // 결정 지점 카드가 뜨고 내려가면 지도 칸의 크기가 바뀐다 — 그때마다 지도에 알려 빈 띠가 생기지 않게 한다
     const ro = new ResizeObserver(() => m.invalidateSize({ animate: false }));
     ro.observe(el.current);
-    return () => { ro.disconnect(); m.remove(); map.current = null; tiles.current = {}; me.current = null; };
+    return () => { ro.disconnect(); m.remove(); map.current = null; tiles.current = {}; me.current = null; steady.current = null; };
   }, [p.meta]);
 
   // 타일 레이어 켜고 끄기
@@ -178,16 +190,27 @@ export function MapView(p: MapProps) {
   }, [p.meta, p.rover?.[0], p.rover?.[1], JSON.stringify(p.visited ?? [])]);
 
   // 스냅샷에 따라 바뀌는 것. 내용이 같으면 다시 그리지 않는다(열어 둔 설명이 닫히지 않게)
-  const dynKey = JSON.stringify([p.hideRoute, p.route, p.back, p.track, p.plan, p.traces, p.obs, p.hyps, p.options?.map((o) => [o.id, o.path, o.stops, o.hyp_ids])]);
+  // 늘 보이는 선 셋의 점 갈아 끼우기 (그리는 순서 = 아래에서 위로: 귀환 경로의 넓은 띠 → 걸어온 길 → 다음에 갈 곳).
+  // 귀환 경로는 넓고 옅은 띠라서, 다음에 갈 곳이 로버일 때(프로그램이 두 선을 같은 길로 보낸다 — device/node.py)에도 띠 위에 흰 선이 얹혀 둘 다 보인다
+  const steadyKey = JSON.stringify([p.hideRoute, p.route, p.back, p.track?.length, p.track?.[p.track.length - 1]]);
+  useEffect(() => {
+    const st = steady.current;
+    if (!st) return;
+    const pts = (a?: XY[]) => (a && a.length > 1 ? a.map(ll) : []);
+    st.back.setLatLngs(pts(p.back));
+    st.trackCase.setLatLngs(pts(p.track)); st.track.setLatLngs(pts(p.track));
+    const route = p.hideRoute ? [] : pts(p.route);
+    st.routeCase.setLatLngs(route); st.route.setLatLngs(route);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [steadyKey, p.meta]);
+
+  // 주의 흔적의 옅어짐(fade)은 쉬지 않고 조금씩 바뀐다 — 눈에 보일 만큼(1/10) 바뀌었을 때만 다시 그린다
+  const dynKey = JSON.stringify([p.plan, p.traces?.map((t) => [t.xy, t.kind, t.kept, Math.round(t.fade * 10)]), p.obs, p.hyps, p.options?.map((o) => [o.id, o.path, o.stops, o.hyp_ids])]);
   useEffect(() => {
     const g = dyn.current;
     if (!g) return;
     g.clearLayers();
-    // 그리는 순서 = 아래에서 위로: 귀환 경로(넓은 띠) → 걸어온 길 → 카드의 경로 → 다음에 갈 곳 → 표식.
-    // 귀환 경로는 넓고 옅은 띠라서, 다음에 갈 곳이 로버일 때(프로그램이 두 선을 같은 길로 보낸다 — device/node.py)에도
-    // 띠 위에 흰 선이 얹혀 둘 다 보인다. 화면은 두 선을 견줘 보지 않고 받은 대로 각각 그린다
-    if (p.back && p.back.length > 1) L.polyline(p.back.map(ll), { color: MAP_COLOR.back, weight: 9, opacity: 0.5, lineCap: "round", lineJoin: "round" }).bindTooltip("Return route to rover").addTo(g);
-    if (p.track && p.track.length > 1) line(g, p.track.map(ll), { color: MAP_COLOR.track, weight: 2.5, opacity: 0.95 }).bindTooltip("Path walked");
+    // 늘 보이는 선 셋(귀환 경로, 걸어온 길, 다음에 갈 곳)은 여기서 그리지 않는다 — 위의 따로 된 그리기가 점만 바꾼다
     for (const o of p.options ?? []) {
       if (o.path.length < 2) continue;
       const c = MAP_COLOR.preview, pts = o.path.map((q) => ll(q as XY));
@@ -200,7 +223,6 @@ export function MapView(p: MapProps) {
       L.marker(pts[0], { icon: L.divIcon({ className: "", iconSize: [14, 14], iconAnchor: [7, 7], html: `<div class="mk from" style="border-color:${c}"></div>` }), zIndexOffset: -200, interactive: false })
         .bindTooltip("Where the cards were computed", { permanent: true, direction: "left", offset: [-10, 0], className: "maplabel from" }).addTo(g);
     }
-    if (!p.hideRoute && p.route && p.route.length > 1) line(g, p.route.map(ll), { color: MAP_COLOR.route, weight: 3, opacity: 1 }).bindTooltip("Route to the next stop");
     // 가설 목표: 가설의 점선(사람이 넣은 방향·범위)과 실제로 가게 되는 자리는 다르다. 목표는 코어가 그 선 근처에서
     // 값이 가장 많이 오르고 걸어갈 수 있는 칸으로 고르고, 출발 한계에 안 맞으면 범위를 줄여 잡기 때문이다(core/src/decision.cpp).
     // 그래서 목표 자리를 고리와 이름표로 따로 표시한다. 가설의 기준점과 잇는 선은 그리지 않는다 — 가설의 점선과 겹쳐 보기 어려웠다.

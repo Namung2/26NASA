@@ -1,4 +1,4 @@
-// 번들 메타(/bundle/meta.json). 바뀌지 않으므로 화면이 처음 뜰 때 한 번 읽는다.
+// 번들 메타(/bundle/meta.json). 한 지도 안에서는 바뀌지 않으므로 화면이 처음 뜰 때 한 번 읽는다(지도가 바뀌면 화면을 새로 연다 — 아래).
 // 레이어·지점·바탕표·출처·임계값의 출처가 여기에 있다. 화면은 값을 지어내지 않고 여기 실린 것만 보인다.
 import { useEffect, useState } from "react";
 
@@ -31,6 +31,15 @@ export function useMeta(): Meta | null {
   useEffect(() => {
     fetch("/bundle/meta.json").then((r) => r.text()).then((t) => setMeta(JSON.parse(t.replace(/\bNaN\b/g, "null")) as Meta)).catch(() => setMeta(null));
   }, []);
+  // 지도가 바뀌면 화면을 새로 연다. 첫 화면에서 다른 지도를 골라 시작하면 서버가 가리키는 번들이 바뀌는데, 이 화면은 번들 메타(지점, 타일, 범위)를
+  // 처음 한 번만 읽기 때문에 그대로 두면 옛 지도의 지점 위에 새 지도의 자료를 그리게 된다. 시뮬레이터 서버(/sim/state)가 없으면 아무 일도 하지 않는다
+  const id = meta?.bundle_id;
+  useEffect(() => {
+    if (!id) return undefined;
+    const check = () => fetch("/sim/state").then((r) => (r.ok ? r.json() : null)).then((j: { bundle?: string } | null) => { if (j?.bundle && j.bundle !== id) window.location.reload(); }).catch(() => undefined);
+    const timer = window.setInterval(check, 2000);
+    return () => window.clearInterval(timer);
+  }, [id]);
   return meta;
 }
 

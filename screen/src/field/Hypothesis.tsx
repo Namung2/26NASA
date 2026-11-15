@@ -22,10 +22,10 @@ export function HypothesisMenu({ meta, draft, onSubmit, onClose }: { meta: Meta;
   return (
     <div className="panel wide">
       <h3>Hypothesis <small>— Pick all four. The anchor is where you stand now.</small></h3>
-      <div className="row"><span className="lbl">Rule</span>{(Object.keys(RULE) as Rule[]).map((r) => <button type="button" key={r} className={rule === r ? "on" : ""} onClick={() => setRule(r)}>{RULE[r]}</button>)}</div>
-      <div className="row"><span className="lbl">Direction</span>{DIRECTION.map((d, i) => <button type="button" key={d} className={dir === i ? "on" : ""} onClick={() => setDir(i)}>{d}</button>)}</div>
-      <div className="row"><span className="lbl">Extent <SourceTip meta={meta} k="menu.extent_levels_m" /></span>{extents.map((m, i) => <button type="button" key={m} className={ext === i ? "on" : ""} onClick={() => setExt(i)}>{m} m</button>)}</div>
-      <div className="row"><span className="lbl">Confidence <SourceTip meta={meta} k="menu.confidence_levels" /></span>{CONFIDENCE.map((c, i) => <button type="button" key={c} className={conf === i ? "on" : ""} onClick={() => setConf(i)}>{c} <small>{CONFIDENCE_RANGE[i]}</small></button>)}</div>
+      <div className="hyprow"><span className="lbl">Rule</span><div className="opts rule">{(Object.keys(RULE) as Rule[]).map((r) => <button type="button" key={r} className={rule === r ? "on" : ""} onClick={() => setRule(r)}>{RULE[r]}</button>)}</div></div>
+      <div className="hyprow"><span className="lbl">Direction</span><div className="opts">{DIRECTION.map((d, i) => <button type="button" key={d} className={dir === i ? "on" : ""} onClick={() => setDir(i)}>{d}</button>)}</div></div>
+      <div className="hyprow"><span className="lbl">Extent <SourceTip meta={meta} k="menu.extent_levels_m" /></span><div className="opts">{extents.map((m, i) => <button type="button" key={m} className={ext === i ? "on" : ""} onClick={() => setExt(i)}>{m} m</button>)}</div></div>
+      <div className="hyprow"><span className="lbl">Confidence <SourceTip meta={meta} k="menu.confidence_levels" /></span><div className="opts">{CONFIDENCE.map((c, i) => <button type="button" key={c} className={conf === i ? "on" : ""} onClick={() => setConf(i)}>{c} <small>{CONFIDENCE_RANGE[i]}</small></button>)}</div></div>
       <div className="row">
         <button type="button" disabled={!ready} onClick={() => ready && onSubmit({ kind: "hyp", rule: rule!, direction_idx: dir!, extent_idx: ext!, confidence_idx: conf! })}>Review</button>
         <button type="button" onClick={onClose}>Close</button>

@@ -122,7 +122,7 @@ h3 small { font-weight: 400; font-size: 12px; letter-spacing: 0; color: var(--fa
 
 /* 조작 단추 줄(독) — 지도 오른쪽에 뜬다. 반투명한 어두운 판 위에 가는 테두리의 각진 타일.
    이름은 늘 타일 안에 적혀 있다. 마우스가 가까우면 타일이 왼쪽으로 조금 커진다(--s), 지도 칸이 낮으면 줄 전체가 줄어든다(--fit). */
-.dock { --fit: 1; --tile: calc(58px * var(--fit)); position: absolute; z-index: 950; right: 10px; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; align-items: flex-end; gap: calc(6px * var(--fit)); padding: calc(7px * var(--fit));
+.dock { --fit: 1; --tile: calc(58px * var(--fit)); position: absolute; z-index: 950; right: 10px; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; flex-wrap: wrap-reverse; align-content: flex-start; max-height: calc(100% - 16px); align-items: flex-end; gap: calc(6px * var(--fit)); padding: calc(7px * var(--fit));
   background: rgba(4, 4, 5, 0.72); border: 1px solid var(--line); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
 .dock-item { position: relative; flex: none; width: var(--tile); height: var(--tile); padding: 0; border: 0; background: none; }
 .dock-item:hover:not(:disabled), .dock-item:active:not(:disabled) { background: none; }
@@ -182,6 +182,15 @@ h3 small { font-weight: 400; font-size: 12px; letter-spacing: 0; color: var(--fa
 .row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
 .row .lbl { flex: none; width: 96px; color: var(--dim); font-size: 12px; font-weight: 600; white-space: nowrap; }
 .panel .row button { min-height: 40px; padding: 6px 13px; }
+/* 가설 창의 고르는 줄: 이름표 칸과 단추 칸을 나눠, 단추가 다음 줄로 넘어가도 이름표 밑으로 파고들지 않게 한다.
+   규칙(Rule)은 넷이라 2 × 2로 같은 폭에 놓는다 — 하나만 아래로 떨어져 따로 보이지 않게 */
+.hyprow { display: grid; grid-template-columns: minmax(96px, max-content) minmax(0, 1fr); column-gap: 12px; align-items: center; }
+.hyprow .lbl { color: var(--dim); font-size: 12px; font-weight: 600; white-space: nowrap; }
+.hyprow .opts { display: flex; flex-wrap: wrap; gap: 6px; }
+.hyprow .opts.rule { display: grid; grid-template-columns: 1fr 1fr; }
+.hyprow button { min-height: 40px; padding: 6px 13px; }
+.hyprow button small { display: block; font-size: 10.5px; line-height: 1.2; }
+.hyprow button.on small { color: var(--dim); }
 /* 창의 맨 아래 줄(보내기·닫기)은 위의 고르는 칸과 선으로 가른다. 어느 단추도 따로 강조하지 않는다 */
 .panel > .row:last-child { margin-top: 2px; padding-top: 12px; border-top: 1px solid var(--line); }
 .panel > .row:last-child button { min-width: 92px; font-weight: 600; letter-spacing: 0.08em; }
@@ -247,7 +256,8 @@ h3 small { font-weight: 400; font-size: 12px; letter-spacing: 0; color: var(--fa
 .card dt:last-of-type { border-bottom: 0; }
 .card .over { display: inline-block; margin-left: 8px; padding: 0 6px; border: 1px solid #7a2c2f; border-radius: 0; color: var(--bad); font-family: var(--font); font-size: 11px; font-weight: 600; font-style: normal; }
 .card-text { margin: 4px 0 0; font-size: 11px; line-height: 1.35; color: var(--faint); }
-.card .choose { margin-top: auto; min-height: 36px; padding: 4px 12px; background: transparent; border-color: var(--line-strong); font-size: 13px; font-weight: 700; letter-spacing: 0.2em; }
+/* 고르는 단추는 카드 칸의 아래에 붙어 늘 보인다 — 화면이 낮아 카드가 길어져도 단추를 찾아 밀어 내리지 않게(카드마다 똑같다) */
+.card .choose { position: sticky; bottom: 0; z-index: 2; box-shadow: 0 -8px 10px 2px #070708; margin-top: auto; min-height: 36px; padding: 4px 12px; background: #070708; border-color: var(--line-strong); font-size: 13px; font-weight: 700; letter-spacing: 0.2em; }
 .card .choose:hover:not(:disabled) { background: var(--text); border-color: var(--text); color: #040405; }
 .card dl, .card-text { margin-bottom: 6px; }
 .card dl:has(+ .card-text) { margin-bottom: 0; }
@@ -275,7 +285,8 @@ h3 small { font-weight: 400; font-size: 12px; letter-spacing: 0; color: var(--fa
 .t3-tools button { padding: 4px 10px; font-size: 11.5px; font-weight: 600; text-transform: capitalize; }
 .t3-tools small { margin-left: 6px; font-size: 11px; color: var(--faint); }
 .t3-legend { left: 10px; bottom: 38px; width: 300px; display: flex; flex-direction: column; gap: 4px; padding: 9px 11px; font-size: 11.5px; color: var(--dim); }
-.t3-legend b { font-size: 12px; color: var(--text); }
+.t3-legend b { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 12px; color: var(--text); }
+.t3-legend b button { padding: 1px 8px; font-size: 10.5px; font-weight: 600; }
 .t3-ramp { position: relative; display: block; height: 10px; margin-top: 3px; border: 1px solid var(--line-strong); }
 .t3-ramp u { position: absolute; top: -3px; bottom: -3px; width: 1px; background: var(--text); }
 .t3-ends { display: flex; justify-content: space-between; font: 11px/1 var(--mono); }
@@ -412,6 +423,11 @@ tr.picked td:first-child { box-shadow: inset 2px 0 0 var(--accent); }
   .inst { padding: 8px 13px 9px; }
 }
 @media (max-width: 1100px) {
+  .simbar { gap: 4px; padding: 4px 10px; }
+  .simbar small { display: none; }
+  .simbar select { max-width: 150px; }
+  .inst { padding: 7px 11px 8px; }
+  .inst-sub { font-size: 11.5px; }
   /* 카드가 좁아지면 값이 칸 밖으로 잘리지 않게 줄을 바꿔 적는다(칸의 순서와 두 줄 배치는 그대로 — 카드가 길어져 고르는 단추가 밀려나지 않게) */
   .card dl { grid-template-columns: auto minmax(0, 1.25fr) auto minmax(0, 1fr); column-gap: 8px; font-size: 12px; }
   .card dt { white-space: normal; }

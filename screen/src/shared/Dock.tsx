@@ -3,7 +3,7 @@
 // 판단이 없다. 받은 단추를 받은 순서대로 그리고, 누르면 그 단추의 onClick을 부를 뿐이다.
 // - 이름은 늘 단추 안에 적혀 있다(올려야만 보이는 이름표로 숨기지 않는다 — 장갑 낀 손은 올릴 수 없다).
 // - 마우스가 가까이 오면 그 둘레의 단추가 조금 커진다. 자리는 그대로다(왼쪽으로만 커진다).
-// - 지도 칸이 낮으면 줄 전체가 그 높이에 맞게 줄어든다.
+// - 지도 칸이 낮으면 줄 전체가 그 높이에 맞게 줄어든다. 줄일 수 있는 데까지 줄여도 안 들어가면 두 줄로 선다.
 // 모양은 shared/style.css의 .dock에 있다.
 import { type ReactNode, useLayoutEffect, useRef } from "react";
 
@@ -23,9 +23,11 @@ export function Dock({ items, label }: { items: DockItem[]; label: string }) {
     const el = root.current, host = el?.parentElement;
     if (!el || !host) return undefined;
     const fit = () => {
-      el.style.setProperty("--fit", "1");
-      const room = host.clientHeight - 16, need = el.offsetHeight;
-      el.style.setProperty("--fit", String(need > room ? Math.max(MIN_FIT, room / need) : 1));
+      // 다 들어가려면 필요한 높이를 단추 수로 셈한다(타일 58, 사이 6, 구분선 1, 안쪽 여백 14 — style.css의 .dock과 같은 값).
+      // 줄일 수 있는 데까지 줄여도 안 들어가면 CSS가 둘째 줄(왼쪽)로 넘긴다 — 단추가 지도 칸 밖으로 잘려 나가지 않게
+      const tiles = el.querySelectorAll(".dock-item").length, seps = el.querySelectorAll(".dock-sep").length;
+      const need = tiles * 58 + seps + (tiles + seps - 1) * 6 + 14, room = host.clientHeight - 16;
+      el.style.setProperty("--fit", String(Math.min(1, Math.max(MIN_FIT, room / need))));
     };
     fit();
     const ro = new ResizeObserver(fit);

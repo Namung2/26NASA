@@ -46,7 +46,8 @@ cd screen && npm install && npm run build && cd ..
 ## Data bundle
 
 The simulator and the screens need a data bundle in `data/bundles/`. Three bundles (about 60 MB each) come with this
-repository as zip files in `release/`. They are unpacked on first use:
+repository as zip files in `release/`: `jezero_west_v1`, `jezero_floor_v1`, `jezero_inlet_v1`. Every bundle shows up
+as a map on the start page. They are unpacked on first use:
 
 - When the live server starts and the bundle is not unpacked yet, it checks the zip's size and SHA-256 against
   `config/bundles.yaml` and unpacks it into `data/bundles/`.
@@ -67,7 +68,8 @@ To rebuild a bundle from the source data instead, download the products listed u
 .venv/bin/python -m pipeline.build --site config/site.yaml --out data/bundles/jezero_west_v1
 ```
 
-Two more areas inside Jezero crater are defined in `config/sites/` (`jezero_floor`, `jezero_inlet`).
+The other two areas are defined in `config/sites/` (`jezero_floor`, `jezero_inlet`) and are built the same way with
+their own `site.yaml`.
 
 ## Run
 
@@ -76,6 +78,21 @@ Live server with the screens (start page at `http://localhost:8000/`, also `/fie
 ```bash
 .venv/bin/python -m sim.live --scenario D1_demo --speed 10
 ```
+
+On the start page you pick, in order: a map, a scenario on that map, and a screen (field screen or rover console).
+Picking a scenario starts it on the chosen map. Both screens then show the same run.
+
+What the screens do:
+
+- **Field screen** (tablet of the crew member outside): map with the path walked, the return route and the next leg;
+  decision cards; observation, hypothesis, photo, new site / blocked area, and *Replan* (click stops on the map in the
+  order you want; the rover returns that order as a "My plan" card next to the other cards, and the plan changes only
+  when that card is selected). Photos are stored on the device under `photos_live/`. The browser gives camera access
+  only on `localhost` or over https; elsewhere the photo panel offers a file picker instead.
+- **Rover console**: all candidate options in one table with an elevation profile, notes and hypotheses, and a 2D / 3D
+  switch on the map. The 3D view shows the terrain with the same layers as the 2D map and the live science-value map.
+  Heights in 3D are stretched for viewing (×3 by default; the factor is always shown and can be changed).
+- A *Simulation / Live* switch on the start page hides the simulator controls in Live mode. See [Limits](#limits).
 
 Scenarios without a screen (writes a report for each scenario to `reports/`):
 
@@ -97,6 +114,10 @@ Tests:
 | `V2_link_loss.yaml` | Validation. Same terrain and start as V1, with the rover link down for part of the walk |
 | `D1_demo.yaml` | Demonstration. Starts 4 h 40 min into the EVA: an unexpected find, a hypothesis, link loss and recovery, the departure limit, return to the rover |
 | `D2_from_rover.yaml` | Demonstration. Starts at the rover at EVA 0 and walks P1 → P2 → P3, then returns |
+
+Scenarios point at stops by name (P1, P2, P3) and at the rover park, so they also run on the other maps
+(`sim.runner --bundle data/bundles/<id> --any-site`). All four finish on all three maps. The pass/fail checks in the
+validation scenarios were written for `jezero_west_v1`.
 
 ## Data
 
@@ -145,3 +166,8 @@ computation on the data listed above.
 - "Science value" is a relative index built from the geologic unit, the mineral class and the crew's observations.
   It is not a calibrated probability, and the starting table (`config/prior_table.yaml`) has not been reviewed by a geologist.
 - The device and rover programs run inside one process in the simulator. They have not been run on flight-like hardware.
+- Live mode on the start page only hides the simulator controls. The data still comes from the simulator, because the
+  device and rover programs do not yet run as separate programs fed by real sensors.
+- Photos stay on the device. Sending them to the rover is not implemented, so the rover console does not show them.
+- One map is loaded at a time. If two people pick different maps, the later choice replaces the earlier one for both.
+- A few provenance notes shown beside values (the ⓘ marks) are still in Korean.

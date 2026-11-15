@@ -82,6 +82,7 @@ export default function Terrain3D(p: {
   const [failed, setFailed] = useState("");
   const [kind, setKind] = useState<Kind>("expected");
   const [exag, setExag] = useState(EXAG_DEFAULT);
+  const [legendOpen, setLegendOpen] = useState(true);    // 범례의 긴 설명을 펼쳐 둘지(접어도 이름·색 눈금·등급 경계는 남는다)
   const pics = useRef(new Map<string, Promise<HTMLImageElement | null>>()).current;   // 받은 그림(타일, 과학 가치)을 주소로 기억해 둔다
   const still = useRef(typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches).current;
   const [spin, setSpin] = useState(!still);              // 천천히 도는 중인가. 사람이 지형을 잡으면 꺼진다
@@ -249,10 +250,10 @@ export default function Terrain3D(p: {
         const fl = new Line2(geo, fm); fl.computeLineDistances(); fl.renderOrder = 6; g.add(fl); t.flow.push(fm);
       }
     };
-    const pin = (xy: XY, color: string, text: string, r = 22) => {
+    const pin = (xy: XY, color: string, text: string, r = 22, labelUp = 70) => {
       const m = new THREE.Mesh(new THREE.SphereGeometry(r, 20, 14), new THREE.MeshBasicMaterial({ color: new THREE.Color(color).getHex() }));
       m.position.copy(at(xy, r)); g.add(m);
-      if (text) { const s = label(text, color); s.position.copy(at(xy, r * 2 + 70)); g.add(s); }
+      if (text) { const s = label(text, color); s.position.copy(at(xy, r * 2 + labelUp)); g.add(s); }
     };
 
     line(p.route, MAP_COLOR.route, 3);                                        // 다음에 갈 곳까지
@@ -265,7 +266,7 @@ export default function Terrain3D(p: {
     for (const s of stops) pin(s.xy as XY, MAP_COLOR.hyp, `Hypothesis target · ${p.option!.id}`, 18);
     if (p.rover) pin(p.rover, MAP_COLOR.back, "Rover", 26);
     if (p.pos) {
-      pin(p.pos, MAP_COLOR.me, "Crew", 24);
+      pin(p.pos, MAP_COLOR.me, "Crew", 24, 190);     // 이름표를 더 높이 단다 — 로버 옆에 서 있을 때 두 이름표가 겹치지 않게
       if (!still) for (const ph of [0, 0.5]) {        // 우주인 자리에서 퍼지는 고리 둘
         const ring = new THREE.Mesh(new THREE.RingGeometry(30, 36, 48), new THREE.MeshBasicMaterial({ color: new THREE.Color(MAP_COLOR.me).getHex(), transparent: true, opacity: 0.6, side: THREE.DoubleSide, depthTest: false }));
         ring.rotation.x = -Math.PI / 2; ring.position.copy(at(p.pos, LIFT_M + 2)); ring.userData.ph = ph; ring.renderOrder = 4; g.add(ring); t.pulse.push(ring);
@@ -275,7 +276,7 @@ export default function Terrain3D(p: {
     const focus = p.pos ?? p.rover;
     if (!t.centered && focus) {
       const c = at(focus, 0);
-      const to = new THREE.Vector3(c.x, c.y + 720, c.z + 1850);   // 낮게 비스듬히 본다 — 위에서 내려다보면 2D와 다를 것이 없다
+      const to = new THREE.Vector3(c.x, c.y + 1050, c.z + 1650);   // 낮게 비스듬히 본다 — 위에서 내려다보면 2D와 다를 것이 없다
       t.controls.target.copy(c); t.centered = true;
       if (still) t.camera.position.copy(to);
       else { const from = new THREE.Vector3(c.x - 2600, c.y + 5200, c.z + 6400); t.camera.position.copy(from); t.fly = { from, to, t0: performance.now(), ms: 2400 }; }
@@ -308,13 +309,14 @@ export default function Terrain3D(p: {
       </div>
       {legend && kind !== "off" && (
         <div className="float t3-legend">
-          <b>{legend.name}</b>
-          <span>{legend.kinds[kind]}</span>
+          <b>{legend.name} <button type="button" onClick={() => setLegendOpen(!legendOpen)} aria-expanded={legendOpen}>{legendOpen ? "Less" : "More"}</button></b>
+          {legendOpen && <span>{legend.kinds[kind]}</span>}
           <i className="t3-ramp" style={{ background: ramp }}>
             {kind !== "var" && legend.grade_bins.map((v) => <u key={v} style={{ left: `${v * 100}%` }} title={`Grade boundary ${v.toFixed(3)}`} />)}
           </i>
           <span className="t3-ends"><em>0</em><em>{top}</em></span>
           <span className="t3-nodata"><i style={{ background: legend.no_data_color }} />No data</span>
+          {/* 이 숫자가 무엇인지(보정된 확률이 아니라 상대 지수)는 접어도 늘 보인다 — 불확실성에 관한 말은 숨기지 않는다 */}
           <small>{legend.note}</small>
         </div>
       )}
