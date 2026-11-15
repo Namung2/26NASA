@@ -9,13 +9,15 @@
 
   WS   /ws/screen         기기 프로그램 → 현장 화면: Snapshot(JSON) / 화면 → ScreenCmd
   WS   /ws/console        로버 프로그램 → 로버 콘솔: ConsoleSnapshot / 콘솔 → ConsoleCmd
-  GET  /bundle/{path}     번들 파일(meta.json, tiles/…)
+  GET  /bundle/{path}     지금 올라와 있는 번들의 파일(meta.json, tiles/…). 지도를 바꿔 시작하면 그 번들의 것으로 바뀐다
+  GET  /bundles/{id}/{path}  번들 id를 짚어 읽는 파일(고르는 화면의 지도 그림용)
   GET  /console/height.json          지형의 높이 격자 (3D 보기용. 번들마다 한 번 만든다)
   GET  /console/science.png?kind=…   지금의 과학 가치 지도를 색 입힌 그림. kind: expected | max | base | var
   GET  /console/science_legend.json  그 그림의 색 눈금·등급 경계·놓임 (rover/console_map.py)
   GET  /sim/state         지금 도는 시나리오·배속·시각 (시뮬레이터 조작 막대용)
   GET  /sim/catalog       고르는 화면용: 지도(번들)와 그 지도의 시나리오 목록, 지금 도는 것
-  POST /sim/start         {scenario, speed, manual}   manual = true면 가설 입력과 카드 선택을 사람이 한다
+  POST /sim/start         {scenario, speed, manual, bundle}   manual = true면 가설 입력과 카드 선택을 사람이 한다.
+                          bundle = 번들 id(없으면 지금 올라와 있는 번들). 다른 번들을 주면 그 지도로 바꿔서 시작한다
   POST /sim/speed         {speed}                     0 = 멈춤
   POST /sim/link          {ch, state}                 state: LOST | AUTO   (데모의 링크 버튼)
   POST /sim/inject        ScenarioEvent 한 개         지금 바로 넣는다
@@ -79,6 +81,7 @@ class StartBody(BaseModel):
     scenario: str
     speed: float = 10.0
     manual: bool = True
+    bundle: str | None = None     # 번들 id. 없으면 지금 올라와 있는 번들에서 시작한다
 
 
 class SpeedBody(BaseModel):
@@ -101,6 +104,7 @@ class Driver:
         self.manual = True
         self.screens: set[WebSocket] = set()
         self.consoles: set[WebSocket] = set()
+        self._files: dict[str, FreshStatic] = {}   # 번들 폴더 → 그 폴더의 파일을 내주는 것
         self._height: dict | None = None  # 높이 격자 (번들이 같으면 다시 만들지 않는다)
         self._png: dict[tuple[int, str], bytes] = {}   # (science_rev, kind) → 그림. 지도가 바뀌면 새로 만든다
         self._debt = 0.0                  # 아직 밀지 못한 시뮬 시간(초)
@@ -108,11 +112,38 @@ class Driver:
         self.run_tag = ""                 # 실행을 시작한 시각 — 사진 파일 이름 앞에 붙는다
         self.photos: list[dict] = []      # 이번 실행에서 찍은 사진 (찍은 순서)
 
-    def start(self, name: str, speed: float, manual: bool) -> None:
+    def bundles(self) -> dict[str, Path]:
+        """고를 수 있는 번들: 켤 때 받은 번들과, 같은 폴더에 나란히 놓인 번들. {번들 id: 폴더}"""
+        out = {}
+        for d in sorted(q for q in Path(self.bundle_root).resolve().parent.iterdir() if (q / "meta.json").exists()):
+            out[json.loads((d / "meta.json").read_text().replace("NaN", "null"))["bundle_id"]] = d
+        return out
+
+    def bundle_id(self) -> str:
+        here = Path(self.bundle_root).resolve()
+        return next((i for i, d in self.bundles().items() if d == here), here.name)
+
+    def files(self, bundle: str | None = None) -> FreshStatic:
+        """번들 폴더 하나의 파일을 내주는 것. bundle이 없으면 지금 올라와 있는 번들. 없는 id면 KeyError."""
+        root = str(Path(self.bundle_root).resolve() if bundle is None else self.bundles()[bundle])
+        if root not in self._files:
+            self._files[root] = FreshStatic(directory=root)
+        return self._files[root]
+
+    def start(self, name: str, speed: float, manual: bool, bundle: str | None = None) -> None:
+        """시나리오를 처음부터 시작한다. bundle(번들 id)을 주면 그 지도로 바꿔서 시작한다 — 없는 id면 KeyError.
+
+        시나리오는 지점을 이름(P1·P2·P3)과 주차점으로만 가리키므로 다른 구역의 번들에서도 돈다(S5 §8, sim.sim.Sim의 any_site).
+        시나리오 파일에 적힌 구역이 아닌 번들로 돌릴 때만 any_site를 켠다.
+        """
         path = SCENARIO_DIR / f"{name}.yaml"
         if not path.exists():
             raise FileNotFoundError(name)
-        sim = Sim(load_scenario(path), self.bundle_root)
+        root = self.bundle_root if bundle is None else str(self.bundles()[bundle])
+        sc = load_scenario(path)
+        meta_id = json.loads((Path(root) / "meta.json").read_text().replace("NaN", "null"))["bundle_id"]
+        sim = Sim(sc, root, any_site=sc.site != meta_id)
+        self.bundle_root = root           # 시뮬레이터가 만들어진 뒤에 바꾼다 — 만들다 실패하면 앞의 지도가 그대로 남는다
         sim.auto_choose = not manual
         sim.manual_types = {"hyp"} if manual else set()
         sim.step()                        # 첫 스냅샷을 만든다
@@ -153,24 +184,25 @@ class Driver:
     def catalog(self) -> dict:
         """고르는 화면(첫 화면)에 보일 것: 지도(번들)마다 그 지도에서 도는 시나리오. 글과 숫자는 번들 메타와 시나리오 파일에 적힌 그대로다.
 
-        이 서버는 켤 때 받은 번들 하나만 올린다. 번들 폴더 옆에 다른 번들이 있으면 목록에는 보이되 loaded = false로 알린다(고를 수 없다).
+        번들 폴더에 나란히 놓인 번들은 모두 고를 수 있다(loaded = true) — /sim/start에 그 번들 id를 주면 지도를 바꿔 시작한다.
+        current = 지금 올라와 있는 번들. 시나리오는 지점을 이름으로만 가리키므로 어느 지도에서나 돈다(start 참고) → 지도마다 전부 보인다.
         """
         here = Path(self.bundle_root).resolve()
         scenarios = [load_scenario(p) for p in sorted(SCENARIO_DIR.glob("*.yaml"))]
         maps = []
-        for d in sorted(q for q in here.parent.iterdir() if (q / "meta.json").exists()):
+        for bid, d in self.bundles().items():
             meta = json.loads((d / "meta.json").read_text().replace("NaN", "null"))
-            loaded = d == here
-            maps.append({"id": meta["bundle_id"], "site": meta["site"], "extent_m": meta["extent_m"], "pois": len(meta.get("pois", [])), "loaded": loaded,
-                         "thumb": "/bundle/tiles/hillshade/0/0/0.png" if loaded else None,
+            maps.append({"id": bid, "site": meta["site"], "extent_m": meta["extent_m"], "pois": len(meta.get("pois", [])),
+                         "loaded": True, "current": d == here,
+                         "thumb": f"/bundles/{bid}/tiles/hillshade/0/0/0.png",
                          "scenarios": [{"id": s.scenario, "kind": s.kind, "title": s.title or s.scenario, "summary": s.summary,
                                         "start_min": s.start.eva_elapsed_min, "stops": s.poi_plan}
-                                       for s in scenarios if s.site == meta["bundle_id"]]})
+                                       for s in scenarios]})
         return {"maps": maps, "running": self.state()}
 
     def state(self) -> dict:
         s = self.sim
-        return {"scenario": self.name, "speed": self.speed, "manual": self.manual, "running": s is not None and not s.done(),
+        return {"bundle": self.bundle_id(), "scenario": self.name, "speed": self.speed, "manual": self.manual, "running": s is not None and not s.done(),
                 "t": s.t if s else 0.0, "home": bool(s and s.home), "link": dict(s.manual) if s else {},
                 "scenarios": sorted(p.stem for p in SCENARIO_DIR.glob("*.yaml"))}
 
@@ -240,9 +272,11 @@ def make_app(bundle_root: str, scenario: str | None, speed: float, manual: bool)
     @app.post("/sim/start")
     async def sim_start(b: StartBody):
         try:
-            drv.start(b.scenario, b.speed, b.manual)
+            drv.start(b.scenario, b.speed, b.manual, b.bundle)
         except FileNotFoundError:
             raise HTTPException(404, f"시나리오 없음: {b.scenario}") from None
+        except KeyError:
+            raise HTTPException(404, f"번들 없음: {b.bundle}") from None
         return drv.state()
 
     @app.post("/sim/speed")
@@ -343,7 +377,19 @@ def make_app(bundle_root: str, scenario: str | None, speed: float, manual: bool)
         finally:
             drv.consoles.discard(ws)
 
-    app.mount("/bundle", FreshStatic(directory=bundle_root), name="bundle")
+    # 번들 파일. 고정된 폴더를 붙이지 않고 요청마다 "지금 올라와 있는 번들"에서 읽는다 — 지도를 바꿔 시작하면 같은 주소가 새 지도를 준다
+    @app.get("/bundle/{path:path}")
+    async def bundle_file(path: str, request: Request):
+        return await drv.files().get_response(path, request.scope)
+
+    @app.get("/bundles/{bid}/{path:path}")
+    async def bundle_file_of(bid: str, path: str, request: Request):
+        try:
+            files = drv.files(bid)
+        except KeyError:
+            raise HTTPException(404, f"번들 없음: {bid}") from None
+        return await files.get_response(path, request.scope)
+
     dist = ROOT / "screen/dist"
     if dist.exists():
         app.mount("/", FreshStatic(directory=dist, html=True), name="screen")

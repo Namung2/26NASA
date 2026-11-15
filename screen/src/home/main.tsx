@@ -23,7 +23,7 @@ import Topography from "../vendor/Topography.jsx";
 
 interface ScenarioInfo { id: string; kind: "D" | "V"; title: string; summary: string; start_min: number; stops: string[] }
 interface MapInfo { id: string; site: string; extent_m: [number, number]; pois: number; loaded: boolean; thumb: string | null; scenarios: ScenarioInfo[] }
-interface Running { scenario: string; running: boolean; t: number; home: boolean; speed: number }
+interface Running { bundle: string; scenario: string; running: boolean; t: number; home: boolean; speed: number }
 interface Catalog { maps: MapInfo[]; running: Running }
 type Step = "map" | "scenario" | "screen";
 
@@ -57,10 +57,10 @@ function Home() {
 
   const map = cat?.maps.find((m) => m.id === mapId) ?? null;
   const scenario = map?.scenarios.find((s) => s.id === scenarioId) ?? null;
-  const isRunning = (id: string) => !!cat && cat.running.scenario === id && cat.running.running;
+  const isRunning = (id: string) => !!cat && cat.running.scenario === id && cat.running.running && cat.running.bundle === mapId;   // 같은 시나리오라도 다른 지도에서 돌고 있으면 새로 시작한다
   const start = async (id: string) => {
     setBusy(true);
-    try { await fetch("/sim/start", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scenario: id, speed: 10, manual: true }) }); await load(); }
+    try { await fetch("/sim/start", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scenario: id, speed: 10, manual: true, bundle: mapId }) }); await load(); }
     finally { setBusy(false); }
   };
   const pickScenario = async (id: string) => {
