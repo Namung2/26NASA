@@ -7,6 +7,7 @@
 import { useState } from "react";
 import { BINDING, approx, clock } from "../shared/i18n";
 import { DEFAULT_LAYERS, LayerPanel } from "../shared/LayerPanel";
+import { Loader } from "../shared/Loader";
 import { MapLegend, MapView } from "../shared/MapView";
 import { useMeta, type XY } from "../shared/meta";
 import { SimBar } from "../shared/SimBar";
@@ -24,8 +25,8 @@ export function ConsoleApp() {
   const [anchor, setAnchor] = useState<string | null>(null);      // 가설의 기준으로 고른 관측
   const [tab, setTab] = useState<"layers" | "pois" | "prior">("layers");
 
-  if (!meta) return <div className="wait">번들 메타를 읽는 중…</div>;
-  if (!snap) return <div className="wait">{connected ? "첫 스냅샷을 기다리는 중…" : "로버 프로그램에 붙는 중…"}<SimBar /></div>;
+  if (!meta) return <div className="wait"><Loader label="Reading bundle metadata" /></div>;
+  if (!snap) return <div className="wait"><Loader label={connected ? "Waiting for the first snapshot" : "Connecting to the rover program"} /><SimBar /></div>;
   const c = snap.crew, st = c.state, n = c.nlt;
   const picked = snap.candidates.find((o) => o.digest === shown) ?? null;
   const onMap = picked ? [picked] : [];     // 표에서 고른 줄 하나의 경로만 지도에 그린다(여러 선이 한꺼번에 겹치지 않게)
@@ -33,36 +34,36 @@ export function ConsoleApp() {
   return (
     <div className="app console">
       <header className="top">
-        <div className="brand"><b>BINGOTIME</b><span>로버 콘솔 · {meta.bundle_id}</span></div>
+        <div className="brand"><b>BINGOTIME</b><span>ROVER CONSOLE · {meta.bundle_id}</span></div>
         <div className="inst">
-          <span className="inst-label">시각</span>
+          <span className="inst-label">TIME</span>
           <div className="inst-read"><b className="num">{clock(snap.t)}</b><span className="chip plain">LMST {snap.lmst}</span></div>
-          <span className="inst-sub">EVA 경과 시간</span>
+          <span className="inst-sub">EVA elapsed time</span>
         </div>
         <div className={`inst ${snap.link_up ? "full" : "local"}`}>
-          <span className="inst-label">밖에 나간 우주인 {c.node}</span>
-          <b className="state">{snap.link_up ? "수신 중" : `응답 없음 · 마지막 수신 ${Math.round(c.last_rx_s)}초 전`}</b>
-          {st && <span className="inst-sub">위치 ({st.pos[0]}, {st.pos[1]}) · 오차 {st.sigma} m<span className={`chip ${st.link_mode === "LOCAL" ? "down" : "up"}`}>기기 표시 {st.link_mode === "LOCAL" ? "로컬 모드" : "연결됨"}</span></span>}
+          <span className="inst-label">CREW OUTSIDE · {c.node}</span>
+          <b className="state">{snap.link_up ? "Receiving" : `No reply · last heard ${Math.round(c.last_rx_s)} s ago`}</b>
+          {st && <span className="inst-sub">Position ({st.pos[0]}, {st.pos[1]}) · error {st.sigma} m<span className={`chip ${st.link_mode === "LOCAL" ? "down" : "up"}`}>device shows {st.link_mode === "LOCAL" ? "local mode" : "connected"}</span></span>}
         </div>
         <div className="inst">
-          <span className="inst-label">출발 한계 <SourceTip meta={meta} k="safety.nlt_force_min" /></span>
-          {n ? <div className="inst-read"><b className="num">{n.slack_min}<u>분 남음</u></b><span className="chip plain">{BINDING[n.binding]}</span></div> : <b className="state">–</b>}
-          {n && <span className="inst-sub">로버까지 <b>{n.return_dist_m} m</b> · 걸어서 {approx(n.return_time_min)}</span>}
+          <span className="inst-label">DEPART LIMIT <SourceTip meta={meta} k="safety.nlt_force_min" /></span>
+          {n ? <div className="inst-read"><b className="num">{n.slack_min}<u>min left</u></b><span className="chip plain">{BINDING[n.binding]}</span></div> : <b className="state">–</b>}
+          {n && <span className="inst-sub"><b>{n.return_dist_m} m</b> to rover · {approx(n.return_time_min)}</span>}
         </div>
         <div className="inst">
-          <span className="inst-label">환경</span>
-          {st ? <div className="inst-read"><b className="num">{st.tau_dust}<u>먼지 τ</u></b><SourceTip meta={meta} k="env.dust_tau_warn" /><span className="chip plain">{st.dose_rate} µSv/h</span>{st.spe && <span className="chip down">SPE</span>}</div> : <b className="state">–</b>}
-          {st && <span className="inst-sub">태양 고도 {st.sun_elev}° · 누적 {st.dose_cum_uSv} µSv{st.t_air_c !== null ? ` · 기온 ${st.t_air_c} °C` : ""}</span>}
+          <span className="inst-label">ENVIRONMENT</span>
+          {st ? <div className="inst-read"><b className="num">{st.tau_dust}<u>dust τ</u></b><SourceTip meta={meta} k="env.dust_tau_warn" /><span className="chip plain">{st.dose_rate} µSv/h</span>{st.spe && <span className="chip down">SPE</span>}</div> : <b className="state">–</b>}
+          {st && <span className="inst-sub">Sun elevation {st.sun_elev}° · total {st.dose_cum_uSv} µSv{st.t_air_c !== null ? ` · air ${st.t_air_c} °C` : ""}</span>}
         </div>
       </header>
-      {(snap.alerts.length > 0 || !connected) && <div className="banner">{!connected && <span>로버 프로그램과 끊김 — 마지막 화면입니다.</span>}{snap.alerts.map((a, i) => <span key={i}>{a}</span>)}</div>}
+      {(snap.alerts.length > 0 || !connected) && <div className="banner">{!connected && <span className="plain"><Loader />Lost the rover program — this is the last screen. Reconnecting</span>}{snap.alerts.map((a, i) => <span key={i}>{a}</span>)}</div>}
 
       <main className="cols">
         <aside className="left">
           <nav className="tabs">
-            <button type="button" className={tab === "layers" ? "on" : ""} onClick={() => setTab("layers")}>레이어</button>
-            <button type="button" className={tab === "pois" ? "on" : ""} onClick={() => setTab("pois")}>지점</button>
-            <button type="button" className={tab === "prior" ? "on" : ""} onClick={() => setTab("prior")}>바탕표</button>
+            <button type="button" className={tab === "layers" ? "on" : ""} onClick={() => setTab("layers")}>LAYERS</button>
+            <button type="button" className={tab === "pois" ? "on" : ""} onClick={() => setTab("pois")}>SITES</button>
+            <button type="button" className={tab === "prior" ? "on" : ""} onClick={() => setTab("prior")}>PRIOR</button>
           </nav>
           {tab === "layers" && <LayerPanel meta={meta} on={layers} setOn={setLayers} shadowBin={snap.shadow_bin} />}
           {tab === "pois" && <PoiList meta={meta} />}
@@ -75,19 +76,19 @@ export function ConsoleApp() {
         </div>
         <aside className="right">
           <section className="sec">
-            <h3>후보 옵션 <small>— 출발 한계를 통과한 전부. 줄을 누르면 지도와 고도 단면에 보입니다.</small></h3>
+            <h3>CANDIDATE OPTIONS <small>— Every one that passes the departure limit. Click a row to show it on the map and the elevation profile.</small></h3>
             <div className="tablewrap"><OptionCompare options={snap.candidates} shownIds={snap.shown_ids} picked={shown} onPick={setShown} /></div>
             {picked && <ElevationProfile o={picked} />}
           </section>
           <section className="sec">
-            <h3>메모와 가설 <small>— 관측을 골라 기준점으로 삼습니다.</small></h3>
+            <h3>NOTES AND HYPOTHESES <small>— Pick an observation to use as the anchor.</small></h3>
             <MemoList obs={snap.obs} anchor={anchor} onPick={setAnchor} />
             <HypForm meta={meta} anchor={anchor} draft={snap.hyp_draft} hyps={snap.hyps} onSend={(m: ConsoleCmd) => send(m)} />
           </section>
           <section className="sec">
-            <h3>최근 결정 지점</h3>
-            {snap.recent_decisions.length === 0 && <p className="none">아직 낸 결정 지점이 없습니다.</p>}
-            <ul className="recent">{[...snap.recent_decisions].reverse().map((d) => <li key={d.dp_id}>{d.dp_id} · EVA {clock(d.ts)} · {d.trigger}/{d.cause} · 옵션 {d.options.map((o) => o.id).join(" ")}</li>)}</ul>
+            <h3>RECENT DECISION POINTS</h3>
+            {snap.recent_decisions.length === 0 && <p className="none">No decision point issued yet.</p>}
+            <ul className="recent">{[...snap.recent_decisions].reverse().map((d) => <li key={d.dp_id}>{d.dp_id} · EVA {clock(d.ts)} · {d.trigger}/{d.cause} · options {d.options.map((o) => o.id).join(" ")}</li>)}</ul>
           </section>
         </aside>
       </main>

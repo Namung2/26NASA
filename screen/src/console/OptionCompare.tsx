@@ -9,25 +9,25 @@ import { MAP_COLOR } from "../shared/MapView";
 import type { DecisionPoint, Option } from "../types";
 
 type SortKey = DecisionPoint["sort_key"];
-const COLS: [SortKey | null, string][] = [[null, "옵션"], ["time_min", "시간"], ["max_slope_deg", "경사(°)"], ["dose_uSv", "선량(µSv)"], ["value", "과학 가치"],
-  [null, "분산"], ["info_gain", "정보 이득"], [null, "흔적"], [null, "두절(분)"], ["nlt_margin_min", "여유(분)"], [null, "귀환"]];
+const COLS: [SortKey | null, string][] = [[null, "Option"], ["time_min", "Time"], ["max_slope_deg", "Slope (°)"], ["dose_uSv", "Dose (µSv)"], ["value", "Science"],
+  [null, "Variance"], ["info_gain", "Info gain"], [null, "Traces"], [null, "Loss (min)"], ["nlt_margin_min", "Margin (min)"], [null, "Return"]];
 
 export function OptionCompare({ options, shownIds, picked, onPick }: { options: Option[]; shownIds: string[]; picked: string | null; onPick: (d: string | null) => void }) {
   const [sort, setSort] = useState<SortKey>("unsorted");
-  if (options.length === 0) return <p className="none">아직 낸 결정 지점이 없습니다.</p>;
+  if (options.length === 0) return <p className="none">No decision point issued yet.</p>;
   return (
     <>
-      <div className="sortline">정렬: {SORT[sort]} {sort !== "unsorted" && <button type="button" onClick={() => setSort("unsorted")}>정렬 풀기</button>}</div>
+      <div className="sortline">Sort: {SORT[sort]} {sort !== "unsorted" && <button type="button" onClick={() => setSort("unsorted")}>Clear sort</button>}</div>
       <table className="compare">
         <thead><tr>{COLS.map(([k, name]) => <th key={name} className={k ? "sortable" : ""} onClick={() => k && setSort(k)}>{name}</th>)}</tr></thead>
         <tbody>
           {sortOptions(options, sort).map((o, i) => (
             <tr key={o.digest + i} className={picked === o.digest ? "picked" : ""} onClick={() => onPick(picked === o.digest ? null : o.digest)}>
-              <td>{LABEL[o.label_key] ?? o.label_key}{o.from_hypothesis ? " · 가설" : ""}{shownIds.includes(o.digest) && <em className="shown">현장 표시</em>}</td>
+              <td>{LABEL[o.label_key] ?? o.label_key}{o.from_hypothesis ? " · hypothesis" : ""}{shownIds.includes(o.digest) && <em className="shown">on field screen</em>}</td>
               <td>{approx(o.time_min)}</td><td>{o.max_slope_deg}</td><td>{o.dose_uSv}</td>
               <td>{GRADE[o.value_grade]} ({o.value_lo === o.value_hi ? o.value_mean : `${o.value_lo}~${o.value_hi}`})</td>
               <td>{o.value_var}</td><td>{o.info_gain}</td><td>{o.explore_count}</td><td>{o.comm_loss_min}</td>
-              <td>{o.late ? `늦음 ${o.nlt_margin_min}` : o.nlt_margin_min}</td><td>{approx(o.return_time_min)}</td>
+              <td>{o.late ? `Late ${o.nlt_margin_min}` : o.nlt_margin_min}</td><td>{approx(o.return_time_min)}</td>
             </tr>
           ))}
         </tbody>
@@ -39,7 +39,7 @@ export function OptionCompare({ options, shownIds, picked, onPick }: { options: 
 // 경로의 고도 단면: 프로그램이 실어 준 (누적 거리, 고도) 점을 그대로 잇는다
 export function ElevationProfile({ o }: { o: Option }) {
   const pts = o.profile;
-  if (pts.length < 2) return <p className="none">이 옵션은 걷는 구간이 없습니다(고도 단면 없음).</p>;
+  if (pts.length < 2) return <p className="none">This option has no walking leg (no elevation profile).</p>;
   const W = 420, H = 110, pad = 28;
   const xs = pts.map((p) => p[0]), zs = pts.map((p) => p[1]);
   const x1 = Math.max(...xs), z0 = Math.min(...zs), z1 = Math.max(...zs);

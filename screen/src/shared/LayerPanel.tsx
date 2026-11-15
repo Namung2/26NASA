@@ -7,8 +7,8 @@ export const DEFAULT_LAYERS: Record<string, boolean> = { hillshade: true, slope:
 
 function legendText(x: LegendItem): string {
   if (x.grade) return GRADE[x.grade] ?? x.grade;
-  if (x.key) return MINERAL[x.key] ?? (x.key === "no_link" ? "링크 안 됨" : x.key === "shadow" ? "그림자" : x.key);
-  if (x.blocked) return `${x.from}° 초과 (통과 불가)`;
+  if (x.key) return MINERAL[x.key] ?? (x.key === "no_link" ? "No link" : x.key === "shadow" ? "Shadow" : x.key);
+  if (x.blocked) return `Over ${x.from}° (impassable)`;
   return `${x.from}~${x.to}°`;
 }
 
@@ -24,10 +24,10 @@ export function LayerPanel({ meta, on, setOn, shadowBin, compact }: {
         const src = meta.layers.find((x) => x.name === t?.source_layer)?.source;
         return (
           <div key={k} className="layer">
-            <label title={src ? `출처: ${src.source} — ${src.product_id}\n라이선스: ${src.license}` : ""}>
+            <label title={src ? `Source: ${src.source} — ${src.product_id}\nLicense: ${src.license}` : ""}>
               <input type="checkbox" checked={!!on[k]} disabled={!t} onChange={(e) => setOn({ ...on, [k]: e.target.checked })} /> {LAYER[k]}
               {k === "shadow" && <small> {meta.shadow_bins_lmst[shadowBin]}~{meta.shadow_bins_lmst[shadowBin + 1]}</small>}
-              {!t && <small> (없음)</small>}
+              {!t && <small> (missing)</small>}
             </label>
             {!compact && on[k] && t && t.legend.length > 0 && (
               <div className="legend">{t.legend.map((x, i) => <span key={i}><i style={{ background: x.color }} />{legendText(x)}</span>)}</div>
@@ -36,7 +36,7 @@ export function LayerPanel({ meta, on, setOn, shadowBin, compact }: {
           </div>
         );
       })}
-      {meta.missing_layers.length > 0 && <div className="missing">못 받은 것: {meta.missing_layers.join(", ")}</div>}
+      {meta.missing_layers.length > 0 && <div className="missing">Not received: {meta.missing_layers.join(", ")}</div>}
     </div>
   );
 }

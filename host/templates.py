@@ -7,6 +7,7 @@
   · 권하는 말을 쓰지 않는다. 금지어: 추천, 권장, 최적, best, recommended, optimal, should (V-5가 검사한다).
     선택지는 나란히 보일 뿐이고 고르는 것은 사람이다.
   · 가설이 낀 옵션의 가치는 한 숫자가 아니라 "등급 (낮은 값~높은 값)"으로 쓴다.
+  · 문장은 영어다(2026-11-14, 화면 전체를 영어로 바꾸며). 낱말은 화면의 screen/src/shared/i18n.ts와 맞춘다.
 """
 from __future__ import annotations
 
@@ -14,44 +15,44 @@ from . import wire as w
 
 BANNED = ("추천", "권장", "최적", "best", "recommended", "optimal", "should")
 
-LABEL = {"continue_plan": "계획 유지", "hyp_target": "가설 목표", "restore_plan": "이전 계획으로", "drop_last": "마지막 지점 빼기",
-         "stay": "여기서 머물기", "return_rover": "로버로 귀환"}
-GRADE = {"LOW": "낮음", "MED": "보통", "HIGH": "높음"}
-RULE = {"strata_continuity": "층서 연속", "proximity": "근접 군집", "unit_boundary": "단위 경계", "erosion_exposure": "침식 노출"}
-DIRECTION = ["북", "북동", "동", "남동", "남", "남서", "서", "북서"]
-CONFIDENCE = ["가능성 낮음", "반반", "가능성 높음"]
-BINDING = {"sunset": "일몰", "eva_max": "EVA 최대 시간"}
+LABEL = {"continue_plan": "Keep plan", "hyp_target": "Hypothesis target", "restore_plan": "Back to earlier plan", "drop_last": "Drop last stop",
+         "stay": "Stay here", "return_rover": "Return to rover"}
+GRADE = {"LOW": "Low", "MED": "Medium", "HIGH": "High"}
+RULE = {"strata_continuity": "Strata continuity", "proximity": "Proximity cluster", "unit_boundary": "Unit boundary", "erosion_exposure": "Erosion exposure"}
+DIRECTION = ["north", "northeast", "east", "southeast", "south", "southwest", "west", "northwest"]
+CONFIDENCE = ["Unlikely", "About even", "Likely"]
+BINDING = {"sunset": "Sunset", "eva_max": "EVA max time"}
 
 HEADER = {
-    ("fork", "route"): "갈림길입니다. 비슷한 경로가 둘 이상 있습니다.",
-    ("fork", "obs"): "관측으로 지도가 바뀌었습니다.",
-    ("fork", "hyp"): "가설로 지도가 바뀌었습니다.",
-    ("env", "other"): "환경이 바뀌었습니다.",
-    ("safety", "other"): "안전 임계에 닿았습니다.",
-    ("user_request", "other"): "귀환을 요청했습니다.",
+    ("fork", "route"): "Fork in the route. Two or more similar routes exist.",
+    ("fork", "obs"): "An observation changed the map.",
+    ("fork", "hyp"): "A hypothesis changed the map.",
+    ("env", "other"): "The environment changed.",
+    ("safety", "other"): "A safety threshold was reached.",
+    ("user_request", "other"): "Return was requested.",
 }
-CAUSE = {"dust": "먼지가 경고 임계를 넘었습니다.", "shadow": "그림자 구간이 바뀌었습니다.", "sunset": "일몰까지 여유가 줄었습니다.",
-         "nlt": "출발 한계에 닿았습니다. 로버로 돌아갈 시간입니다.", "spe": "태양 입자 경보입니다. 로버로 대피합니다."}
+CAUSE = {"dust": "Dust passed the warning threshold.", "shadow": "The shadow time bin changed.", "sunset": "The margin to sunset shrank.",
+         "nlt": "The departure limit was reached. Time to return to the rover.", "spe": "Solar particle alert. Take shelter in the rover."}
 NOTICE = {
-    "hyp_unreachable_within_nlt": "가설 목표는 출발 한계 안에 다녀올 수 없어 선택지에 없습니다.",
-    "hyp_no_effect": "가설이 그 방향의 지도 값을 올리지 않아 가설 목표가 없습니다.",
-    "no_feasible_return": "로버까지 가는 길을 찾지 못했습니다.",
-    "bundle_mismatch": "기기와 로버의 지도 묶음이 다릅니다.",
-    "options_paused": "선택지 정지 — 로버와 연결이 끊겨 새 선택지를 받지 못합니다.",
-    "tau_warn": "먼지 광학 두께가 경고 임계를 넘었습니다.",
-    "nlt_warn": "출발 한계가 가까워졌습니다.",
-    "pos_warn": "위치 오차가 큽니다.",
-    "late": "출발 한계를 이미 넘겼습니다.",
+    "hyp_unreachable_within_nlt": "The hypothesis target cannot be visited within the departure limit, so it is not among the options.",
+    "hyp_no_effect": "The hypothesis did not raise map values in that direction, so there is no hypothesis target.",
+    "no_feasible_return": "No route to the rover was found.",
+    "bundle_mismatch": "The device and the rover hold different map bundles.",
+    "options_paused": "Options paused — the rover link is down, so no new options can arrive.",
+    "tau_warn": "Dust optical depth passed the warning threshold.",
+    "nlt_warn": "The departure limit is near.",
+    "pos_warn": "Position error is large.",
+    "late": "The departure limit has already passed.",
 }
 
 
 def approx_time(minutes: float) -> str:
-    """걷는 시간의 표기: "약 N분 M초". 시간은 어림값이라 늘 '약'을 붙인다(2026-11-14 결정).
+    """걷는 시간의 표기: "about N min M s". 시간은 어림값이라 늘 about을 붙인다(2026-11-14 결정. 그때는 한글 '약'이었고 영어로 바꾸며 about이 됐다).
 
     코어가 10초 단위로 맞춰 준 값(config/params.yaml display_precision.time_min)을 분·초로 나눠 적을 뿐, 다시 계산하지 않는다.
     """
     m, sec = divmod(round(minutes * 60.0), 60)
-    return f"약 {m}분 {sec}초" if sec else f"약 {m}분"
+    return f"about {m} min {sec} s" if sec else f"about {m} min"
 
 
 def confidence_name(p: float) -> str:
@@ -72,9 +73,9 @@ def render_option(o: w.Option) -> str:
         value = f"{GRADE[o.value_grade]} ({o.value_lo:.1f}~{o.value_hi:.1f})"
     else:
         value = f"{GRADE[o.value_grade]} ({o.value_mean:.1f})"
-    late = f" 한계를 {-o.nlt_margin_min:.0f}분 넘김." if o.late else f" 출발까지 {o.nlt_margin_min:.0f}분."
-    return (f"{o.id} {LABEL.get(o.label_key, o.label_key)}: {approx_time(o.time_min)}, 최대 경사 {o.max_slope_deg:.0f}°, 선량 {o.dose_uSv:.1f} µSv, "
-            f"과학 가치 {value}, 정보 이득 {o.info_gain:.1f}, 통신 두절 {o.comm_loss_min:.0f}분.{late}")
+    late = f" {-o.nlt_margin_min:.0f} min past the limit." if o.late else f" {o.nlt_margin_min:.0f} min to departure."
+    return (f"{o.id} {LABEL.get(o.label_key, o.label_key)}: {approx_time(o.time_min)}, max slope {o.max_slope_deg:.0f}°, dose {o.dose_uSv:.1f} µSv, "
+            f"science value {value}, info gain {o.info_gain:.1f}, comm loss {o.comm_loss_min:.0f} min.{late}")
 
 
 def render_notice(key: str) -> str:
@@ -89,11 +90,11 @@ def dp_text(dp: w.DecisionPoint) -> list[str]:
 def hyp_readback(d: w.HypDraft, extent_levels: list[float]) -> str:
     """가설 확인 창의 되읽기 문장. 네 칸이 다 찼을 때만 문장이 된다."""
     if d.withdraw_hyp_id:
-        return f"가설 {d.withdraw_hyp_id}을(를) 거둡니다. 지도가 이 가설이 없던 상태로 돌아갑니다."
+        return f"Withdraw hypothesis {d.withdraw_hyp_id}. The map goes back to how it was without this hypothesis."
     if d.missing or d.rule is None:
         return ""
-    where = "" if d.rule == "proximity" else f"{DIRECTION[d.direction_idx]}쪽으로 "
-    return f"{RULE[d.rule]} 가설: 여기서 {where}{extent_levels[d.extent_idx]:.0f} m까지, 확신은 '{CONFIDENCE[d.confidence_idx]}'."
+    where = "" if d.rule == "proximity" else f"toward the {DIRECTION[d.direction_idx]}, "
+    return f"{RULE[d.rule]} hypothesis: from the anchor point, {where}out to {extent_levels[d.extent_idx]:.0f} m, confidence '{CONFIDENCE[d.confidence_idx]}'."
 
 
 def self_check() -> None:

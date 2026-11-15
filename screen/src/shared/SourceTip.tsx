@@ -7,8 +7,8 @@ export function SourceTip({ meta, k }: { meta: Meta | null; k: string }) {
   if (!p) return null;
   const temp = p.status !== "REF" && p.status !== "DESIGN";
   return (
-    <span className="src" title={`${p.key} = ${String(p.value)} ${p.unit}\n출처: ${p.source}\n상태: ${p.status}`}>
-      ⓘ{temp && <span className="temp">임시값</span>}
+    <span className="src" title={`${p.key} = ${String(p.value)} ${p.unit}\nSource: ${p.source}\nStatus: ${p.status}`}>
+      ⓘ{temp && <span className="temp">provisional</span>}
     </span>
   );
 }

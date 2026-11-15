@@ -2,12 +2,14 @@
 //
 // 이 화면에는 판단이 없다. 스냅샷(types.ts의 Snapshot)을 그리고, 누른 것을 명령(ScreenCmd)으로 보낼 뿐이다.
 // 화면이 스스로 하는 일은 카드 정렬과 레이어·패널 켜고 끄기뿐이다.
-// 구성: 위 = 계기 넷(다음 지점 · 출발 한계 · 링크 · 시각) / 가운데 = 지도(범례와 넣어 둔 가설이 얹힌다) / 오른쪽 = 조작 단추 / 아래 = 결정 지점 카드
+// 구성: 위 = 계기 넷(다음 지점 · 출발 한계 · 링크 · 시각) / 가운데 = 지도(범례와 넣어 둔 가설이 얹힌다) / 지도 오른쪽에 뜬 조작 단추 줄(Dock) / 아래 = 결정 지점 카드
 // 모양은 shared/style.css에 있다. 여기서는 받은 값을 어느 자리에 놓을지만 정한다.
 import { useEffect, useState } from "react";
 import { DecisionCards } from "../shared/DecisionCards";
 import { BINDING, approx, clock } from "../shared/i18n";
+import { Dock } from "../shared/Dock";
 import { DEFAULT_LAYERS, LayerPanel } from "../shared/LayerPanel";
+import { Loader } from "../shared/Loader";
 import { MapLegend, MapView } from "../shared/MapView";
 import { useMeta, type XY } from "../shared/meta";
 import { SimBar } from "../shared/SimBar";
@@ -43,51 +45,51 @@ export function FieldApp() {
   useEffect(() => setPreview(null), [dpId]);                        // 카드 묶음이 바뀌면 미리 보기를 지운다
   const cmd = (c: Cmd) => send({ type: "command", cmd: c } satisfies ScreenCmd);
 
-  if (!meta) return <div className="wait">번들 메타를 읽는 중…</div>;
-  if (!snap) return <div className="wait">{connected ? "첫 스냅샷을 기다리는 중…" : "기기 프로그램에 붙는 중…"}<SimBar /></div>;
+  if (!meta) return <div className="wait"><Loader label="Reading bundle metadata" /></div>;
+  if (!snap) return <div className="wait"><Loader label={connected ? "Waiting for the first snapshot" : "Connecting to the device program"} /><SimBar /></div>;
   const s = snap.state, g = snap.gauge, n = snap.nlt, uhf = snap.channels.uhf, wifi = snap.channels.wifi;
   const draft = snap.hyp_draft;
 
   return (
     <div className="app field">
       <header className="top">
-        <div className="brand"><b>BINGOTIME</b><span>현장 화면 · {s.node}</span></div>
+        <div className="brand"><b>BINGOTIME</b><span>FIELD · {s.node}</span></div>
         <div className="inst">
-          <span className="inst-label">다음 지점</span>
+          <span className="inst-label">NEXT STOP</span>
           {g ? (
             <div className="inst-main">
-              <span className="compass" title={`방위 ${Math.round(g.bearing_deg)}° (위가 북쪽)`}><i style={{ transform: `rotate(${g.bearing_deg}deg)` }} /></span>
+              <span className="compass" title={`Bearing ${Math.round(g.bearing_deg)}° (north is up)`}><i style={{ transform: `rotate(${g.bearing_deg}deg)` }} /></span>
               <div>
                 <div className="inst-read"><b className="num">{g.distance_m}<u>m</u></b></div>
-                <span className="inst-sub">걸어서 {approx(g.time_min)} · 방위 {Math.round(g.bearing_deg)}°</span>
+                <span className="inst-sub">{approx(g.time_min)} · bearing {Math.round(g.bearing_deg)}°</span>
               </div>
             </div>
-          ) : <b className="state">계획된 지점 없음</b>}
+          ) : <b className="state">No planned stop</b>}
         </div>
         <div className={`inst${snap.nlt_warn ? " warn" : ""}`}>
-          <span className="inst-label">출발 한계 <SourceTip meta={meta} k="safety.nlt_force_min" /></span>
-          {n ? <div className="inst-read"><b className="num">{n.slack_min}<u>분 남음</u></b><span className="chip plain">{BINDING[n.binding]}</span></div> : <b className="state">귀환 지도 없음</b>}
-          {n && <span className="inst-sub">로버까지 <b>{n.return_dist_m} m</b> · 걸어서 {approx(n.return_time_min)}{n.degraded ? " · 가까운 길 기준" : ""}</span>}
+          <span className="inst-label">DEPART LIMIT <SourceTip meta={meta} k="safety.nlt_force_min" /></span>
+          {n ? <div className="inst-read"><b className="num">{n.slack_min}<u>min left</u></b><span className="chip plain">{BINDING[n.binding]}</span></div> : <b className="state">No return map</b>}
+          {n && <span className="inst-sub"><b>{n.return_dist_m} m</b> to rover · {approx(n.return_time_min)}{n.degraded ? " · nearest-path estimate" : ""}</span>}
         </div>
         <div className={`inst ${s.link_mode === "LOCAL" ? "local" : "full"}`}>
-          <span className="inst-label">링크</span>
-          <b className="state">{s.link_mode === "LOCAL" ? "로컬 모드 — 로버 응답 없음" : "연결됨"}</b>
+          <span className="inst-label">LINK</span>
+          <b className="state">{s.link_mode === "LOCAL" ? "Local mode — no reply from rover" : "Connected"}</b>
           <span className="inst-sub">
-            <span className={`chip ${uhf.state === "UP" ? "up" : "down"}`}>UHF {uhf.state === "UP" ? "켜짐" : `끊김 ${Math.round(uhf.down_for_s ?? 0)}초`}</span>
-            <span className={`chip ${wifi.state === "UP" ? "up" : ""}`}>Wi-Fi {wifi.state === "UP" ? "켜짐" : "끊김"}</span>
-            {snap.options_paused && <span className="chip hold">선택지 정지</span>}
-            {(snap.options_paused || snap.pending_events > 0) && <span className="chip plain">대기 {snap.pending_events}건</span>}
+            <span className={`chip ${uhf.state === "UP" ? "up" : "down"}`}>UHF {uhf.state === "UP" ? "up" : `down ${Math.round(uhf.down_for_s ?? 0)} s`}</span>
+            <span className={`chip ${wifi.state === "UP" ? "up" : ""}`}>Wi-Fi {wifi.state === "UP" ? "up" : "down"}</span>
+            {snap.options_paused && <span className="chip hold">Options paused</span>}
+            {(snap.options_paused || snap.pending_events > 0) && <span className="chip plain">{snap.pending_events} queued</span>}
           </span>
         </div>
         <div className="inst">
-          <span className="inst-label">시각</span>
+          <span className="inst-label">TIME</span>
           <div className="inst-read"><b className="num">{clock(s.t)}</b><span className="chip plain">LMST {snap.lmst}</span></div>
-          <span className="inst-sub">먼지 τ <b>{s.tau_dust}</b><SourceTip meta={meta} k="env.dust_tau_warn" /> · 누적 <b>{s.dose_cum_uSv} µSv</b> · 기록 {snap.log_count}건</span>
+          <span className="inst-sub">Dust τ <b>{s.tau_dust}</b><SourceTip meta={meta} k="env.dust_tau_warn" /> · total <b>{s.dose_cum_uSv} µSv</b> · {snap.log_count} log entries</span>
         </div>
       </header>
 
       {(snap.notices.length > 0 || !connected) && (
-        <div className="banner">{!connected && <span>기기 프로그램과 끊김 — 마지막 화면입니다.</span>}{snap.notices.map((x, i) => <span key={i}>{x}</span>)}</div>
+        <div className="banner">{!connected && <span className="plain"><Loader />Lost the device program — this is the last screen. Reconnecting</span>}{snap.notices.map((x, i) => <span key={i}>{x}</span>)}</div>
       )}
 
       <main className="mid">
@@ -97,36 +99,36 @@ export function FieldApp() {
         <MapLegend track />
         {snap.hyps.length > 0 && (
           <div className="float hyplist">
-            <small>넣어 둔 가설</small>
+            <small>HYPOTHESES</small>
             {snap.hyps.map((h) => (
-              <div key={h.hyp_id} className={pickedHyp === h.hyp_id ? "picked" : ""} title="올리면 지도에 방향과 범위가 보입니다. 누르면 계속 보입니다"
+              <div key={h.hyp_id} className={pickedHyp === h.hyp_id ? "picked" : ""} title="Hover to show its direction and extent on the map. Click to keep it shown"
                 onPointerEnter={() => setHoverHyp(h.hyp_id)} onPointerLeave={() => setHoverHyp(null)} onClick={() => togglePick(h.hyp_id)}>
-                <span>{h.hyp_id}<br /><i>처음: {h.conf_chosen_name} → 지금: {h.conf_now_name}</i></span>
-                <button type="button" onClick={(e) => { e.stopPropagation(); cmd({ kind: "hyp_withdraw", hyp_id: h.hyp_id }); }}>철회</button>
+                <span>{h.hyp_id}<br /><i>At entry: {h.conf_chosen_name} → now: {h.conf_now_name}</i></span>
+                <button type="button" onClick={(e) => { e.stopPropagation(); cmd({ kind: "hyp_withdraw", hyp_id: h.hyp_id }); }}>Withdraw</button>
               </div>
             ))}
           </div>
         )}
-        <aside className="actions">
-          <button type="button" className={panel === "obs" ? "on" : ""} onClick={() => setPanel(panel === "obs" ? null : "obs")}>{ICON.obs}관측</button>
-          <button type="button" className={panel === "hyp" ? "on" : ""} onClick={() => setPanel(panel === "hyp" ? null : "hyp")}>{ICON.hyp}가설</button>
-          <button type="button" onClick={() => cmd({ kind: "photo" })}>{ICON.photo}촬영</button>
-          <button type="button" className={panel === "mark" ? "on" : ""} onClick={() => setPanel(panel === "mark" ? null : "mark")}>{ICON.mark}새 지점 · 막힘</button>
-          <button type="button" className={panel === "layers" ? "on" : ""} onClick={() => setPanel(panel === "layers" ? null : "layers")}>{ICON.layers}레이어</button>
-          <span className="gap" />
-          <button type="button" className="go-home" onClick={() => cmd({ kind: "return" })}>{ICON.home}귀환</button>
-        </aside>
+        <Dock label="Actions" items={[
+          { key: "obs", icon: ICON.obs, label: "Observe", on: panel === "obs", onClick: () => setPanel(panel === "obs" ? null : "obs") },
+          { key: "hyp", icon: ICON.hyp, label: "Hypo.", title: "Hypothesis", on: panel === "hyp", onClick: () => setPanel(panel === "hyp" ? null : "hyp") },
+          { key: "photo", icon: ICON.photo, label: "Photo", onClick: () => cmd({ kind: "photo" }) },
+          { key: "mark", icon: ICON.mark, label: "Mark", title: "New site · Blocked", on: panel === "mark", onClick: () => setPanel(panel === "mark" ? null : "mark") },
+          { key: "layers", icon: ICON.layers, label: "Layers", on: panel === "layers", onClick: () => setPanel(panel === "layers" ? null : "layers") },
+          { sep: true },
+          { key: "home", icon: ICON.home, label: "Return", tone: "warm", onClick: () => cmd({ kind: "return" }) },
+        ]} />
         {panel === "obs" && <ObsPanel meta={meta} onSend={(c) => { cmd(c); setPanel(null); }} onClose={() => setPanel(null)} />}
         {panel === "mark" && <MarkPanel meta={meta} onSend={(c) => { cmd(c); setPanel(null); }} onClose={() => setPanel(null)} />}
         {panel === "hyp" && <HypothesisMenu meta={meta} draft={draft} onSubmit={(c) => { cmd(c); setPanel(null); }} onClose={() => setPanel(null)} />}
-        {panel === "layers" && <div className="panel"><h3>레이어</h3><LayerPanel meta={meta} on={layers} setOn={setLayers} shadowBin={snap.shadow_bin} /><div className="row"><button type="button" onClick={() => setPanel(null)}>닫기</button></div></div>}
+        {panel === "layers" && <div className="panel"><h3>Layers</h3><LayerPanel meta={meta} on={layers} setOn={setLayers} shadowBin={snap.shadow_bin} /><div className="row"><button type="button" onClick={() => setPanel(null)}>Close</button></div></div>}
         {draft && panel !== "hyp" && <HypConfirmDialog draft={draft} onReply={(reply) => { cmd({ kind: "hyp_reply", reply }); if (reply === "edit") setPanel("hyp"); }} />}
       </main>
 
       {snap.dp
         ? <DecisionCards key={snap.dp.dp_id} dp={snap.dp} text={snap.dp_text} source={snap.dp_source} ageS={snap.dp_age_s} meta={meta}
             onChoose={(id, sort) => cmd({ kind: "choose", dp_id: snap.dp!.dp_id, option_id: id, sort_key: sort })} onPreview={setPreview} />
-        : <section className="dp empty">{snap.options_paused ? "선택지 정지 — 로버와 다시 이어지면 새 카드가 옵니다. 귀환 경로와 출발 한계는 계속 보입니다." : "떠 있는 결정 지점이 없습니다."}</section>}
+        : <section className="dp empty">{snap.options_paused ? <Loader label="Options paused — new cards arrive once the rover link is back. The return route and departure limit stay on screen." /> : "No decision point is open."}</section>}
       <SimBar />
     </div>
   );

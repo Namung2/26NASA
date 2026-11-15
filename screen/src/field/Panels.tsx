@@ -10,13 +10,13 @@ export function ObsPanel({ meta, onSend, onClose }: { meta: Meta; onSend: (c: Cm
   const max = Number(meta.params.find((p) => p.key === "menu.note_max_chars")?.value ?? 200);
   return (
     <div className="panel">
-      <h3>관측</h3>
-      <label><input type="checkbox" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} /> 다시 확인했음</label>
-      <textarea placeholder="자유 메모 (선택) — 글자 그대로 저장됩니다" maxLength={max} value={note} onChange={(e) => setNote(e.target.value)} />
+      <h3>Observation</h3>
+      <label><input type="checkbox" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} /> Re-checked</label>
+      <textarea placeholder="Free note (optional) — saved exactly as typed" maxLength={max} value={note} onChange={(e) => setNote(e.target.value)} />
       <div className="row">
-        <button type="button" onClick={() => onSend({ kind: "obs", found: true, confirmed, note })}>발견</button>
-        <button type="button" onClick={() => onSend({ kind: "obs", found: false, confirmed, note })}>없음</button>
-        <button type="button" onClick={onClose}>닫기</button>
+        <button type="button" onClick={() => onSend({ kind: "obs", found: true, confirmed, note })}>Found</button>
+        <button type="button" onClick={() => onSend({ kind: "obs", found: false, confirmed, note })}>None</button>
+        <button type="button" onClick={onClose}>Close</button>
       </div>
     </div>
   );
@@ -29,16 +29,16 @@ export function MarkPanel({ meta, onSend, onClose }: { meta: Meta; onSend: (c: C
   const radii = paramList(meta, "menu.mark_radius_levels_m");
   return (
     <div className="panel">
-      <h3>새 지점 · 막힘</h3>
-      <input placeholder="지점 이름" maxLength={40} value={name} onChange={(e) => setName(e.target.value)} />
-      <textarea placeholder="자유 메모 (선택)" value={note} onChange={(e) => setNote(e.target.value)} />
+      <h3>New site · Blocked</h3>
+      <input placeholder="Site name" maxLength={40} value={name} onChange={(e) => setName(e.target.value)} />
+      <textarea placeholder="Free note (optional)" value={note} onChange={(e) => setNote(e.target.value)} />
       <div className="row">
-        <button type="button" disabled={!name} onClick={() => onSend({ kind: "mark", what: "poi", name, radius_idx: 0, note })}>현재 위치를 새 지점으로</button>
+        <button type="button" disabled={!name} onClick={() => onSend({ kind: "mark", what: "poi", name, radius_idx: 0, note })}>Mark this spot as a new site</button>
       </div>
-      <div className="row">막힘 반경 {radii.map((r, i) => <button type="button" key={r} className={radius === i ? "on" : ""} onClick={() => setRadius(i)}>{r} m</button>)}
-        <button type="button" disabled={radius === null} onClick={() => radius !== null && onSend({ kind: "mark", what: "blocked", name, radius_idx: radius, note })}>여기가 막힘</button>
+      <div className="row">Blocked radius {radii.map((r, i) => <button type="button" key={r} className={radius === i ? "on" : ""} onClick={() => setRadius(i)}>{r} m</button>)}
+        <button type="button" disabled={radius === null} onClick={() => radius !== null && onSend({ kind: "mark", what: "blocked", name, radius_idx: radius, note })}>Blocked here</button>
       </div>
-      <div className="row"><button type="button" onClick={onClose}>닫기</button></div>
+      <div className="row"><button type="button" onClick={onClose}>Close</button></div>
     </div>
   );
 }

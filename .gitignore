@@ -13,6 +13,8 @@ screen/dist/
 data/raw/
 data/bundles/
 *.zip
+# 밖에서 가져온 디자인 참고 코드 (올리지 않는다. 없어도 빌드된다 — screen/src/home/main.tsx)
+screen/src/vendor/
 # 개인 작업 흔적
 .backup_*/
 docs.zip

@@ -1,21 +1,12 @@
 <!doctype html>
-<html lang="ko">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>BingoTime</title>
-    <style>
-      body { font-family: system-ui, sans-serif; background: #14171c; color: #e6e8eb; display: grid; place-items: center; min-height: 100vh; margin: 0; }
-      a { display: block; color: #e6e8eb; border: 1px solid #3a4150; border-radius: 8px; padding: 16px 24px; margin: 12px 0; text-decoration: none; }
-      a:hover { background: #20252d; }
-      small { color: #9aa3b2; }
-    </style>
   </head>
   <body>
-    <main>
-      <h1>BingoTime</h1>
-      <a href="/field.html">현장 화면 <small>— 밖에 나간 우주인의 태블릿 (기기 프로그램)</small></a>
-      <a href="/console.html">로버 콘솔 <small>— 로버에 탄 사람의 계획 화면 (로버 프로그램)</small></a>
-    </main>
+    <div id="root"></div>
+    <script type="module" src="/src/home/main.tsx"></script>
   </body>
 </html>

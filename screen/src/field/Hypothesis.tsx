@@ -21,14 +21,14 @@ export function HypothesisMenu({ meta, draft, onSubmit, onClose }: { meta: Meta;
   const ready = rule !== null && dir !== null && ext !== null && conf !== null;
   return (
     <div className="panel wide">
-      <h3>가설 <small>— 네 칸을 모두 골라야 합니다. 기준점은 지금 선 자리입니다.</small></h3>
-      <div className="row"><span className="lbl">규칙</span>{(Object.keys(RULE) as Rule[]).map((r) => <button type="button" key={r} className={rule === r ? "on" : ""} onClick={() => setRule(r)}>{RULE[r]}</button>)}</div>
-      <div className="row"><span className="lbl">방향</span>{DIRECTION.map((d, i) => <button type="button" key={d} className={dir === i ? "on" : ""} onClick={() => setDir(i)}>{d}</button>)}</div>
-      <div className="row"><span className="lbl">범위 <SourceTip meta={meta} k="menu.extent_levels_m" /></span>{extents.map((m, i) => <button type="button" key={m} className={ext === i ? "on" : ""} onClick={() => setExt(i)}>{m} m</button>)}</div>
-      <div className="row"><span className="lbl">확신 <SourceTip meta={meta} k="menu.confidence_levels" /></span>{CONFIDENCE.map((c, i) => <button type="button" key={c} className={conf === i ? "on" : ""} onClick={() => setConf(i)}>{c} <small>{CONFIDENCE_RANGE[i]}</small></button>)}</div>
+      <h3>Hypothesis <small>— Pick all four. The anchor is where you stand now.</small></h3>
+      <div className="row"><span className="lbl">Rule</span>{(Object.keys(RULE) as Rule[]).map((r) => <button type="button" key={r} className={rule === r ? "on" : ""} onClick={() => setRule(r)}>{RULE[r]}</button>)}</div>
+      <div className="row"><span className="lbl">Direction</span>{DIRECTION.map((d, i) => <button type="button" key={d} className={dir === i ? "on" : ""} onClick={() => setDir(i)}>{d}</button>)}</div>
+      <div className="row"><span className="lbl">Extent <SourceTip meta={meta} k="menu.extent_levels_m" /></span>{extents.map((m, i) => <button type="button" key={m} className={ext === i ? "on" : ""} onClick={() => setExt(i)}>{m} m</button>)}</div>
+      <div className="row"><span className="lbl">Confidence <SourceTip meta={meta} k="menu.confidence_levels" /></span>{CONFIDENCE.map((c, i) => <button type="button" key={c} className={conf === i ? "on" : ""} onClick={() => setConf(i)}>{c} <small>{CONFIDENCE_RANGE[i]}</small></button>)}</div>
       <div className="row">
-        <button type="button" disabled={!ready} onClick={() => ready && onSubmit({ kind: "hyp", rule: rule!, direction_idx: dir!, extent_idx: ext!, confidence_idx: conf! })}>확인 창으로</button>
-        <button type="button" onClick={onClose}>닫기</button>
+        <button type="button" disabled={!ready} onClick={() => ready && onSubmit({ kind: "hyp", rule: rule!, direction_idx: dir!, extent_idx: ext!, confidence_idx: conf! })}>Review</button>
+        <button type="button" onClick={onClose}>Close</button>
       </div>
     </div>
   );
@@ -37,12 +37,12 @@ export function HypothesisMenu({ meta, draft, onSubmit, onClose }: { meta: Meta;
 export function HypConfirmDialog({ draft, onReply }: { draft: HypDraft; onReply: (r: "approve" | "reject" | "edit") => void }) {
   return (
     <div className="panel wide confirm">
-      <h3>{draft.withdraw_hyp_id ? "가설 철회 확인" : "가설 확인"}</h3>
+      <h3>{draft.withdraw_hyp_id ? "Confirm withdrawal" : "Confirm hypothesis"}</h3>
       <p className="readback">{draft.readback}</p>
       <div className="row">
-        <button type="button" onClick={() => onReply("approve")}>승인</button>
-        {!draft.withdraw_hyp_id && <button type="button" onClick={() => onReply("edit")}>수정</button>}
-        <button type="button" onClick={() => onReply("reject")}>거절</button>
+        <button type="button" onClick={() => onReply("approve")}>Approve</button>
+        {!draft.withdraw_hyp_id && <button type="button" onClick={() => onReply("edit")}>Edit</button>}
+        <button type="button" onClick={() => onReply("reject")}>Reject</button>
       </div>
     </div>
   );

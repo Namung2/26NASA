@@ -82,16 +82,16 @@ export function MapLegend({ back = true, track = false }: { back?: boolean; trac
   const pt = (c: string) => <svg width="26" height="10"><circle cx="13" cy="5" r="4" fill={c} stroke="#07080a" /></svg>;
   return (
     <div className="float maplegend">
-      {track && <span>{ln(MAP_COLOR.track, undefined, 2.5)}걸어온 길</span>}
-      {back && <span>{ln(MAP_COLOR.back, undefined, 8, 0.5)}로버 귀환 경로</span>}
-      <span>{ln(MAP_COLOR.route)}다음에 갈 곳</span>
-      <span>{ln(MAP_COLOR.hyp, "1 6")}가설 (H에 올리면 보임)</span>
-      <span><svg width="26" height="12"><circle cx="13" cy="6" r="4.5" fill="none" stroke={MAP_COLOR.stop} strokeWidth="2.5" /></svg>가야 할 지점</span>
-      <span><svg width="26" height="12"><circle cx="13" cy="6" r="4.5" fill="none" stroke={MAP_COLOR.hyp} strokeWidth="2.5" /></svg>가설 목표</span>
-      <span><svg width="26" height="12"><circle cx="13" cy="6" r="5.5" fill={MAP_COLOR.done} stroke="#07080a" /></svg>다녀온 곳</span>
-      <span>{pt(MAP_COLOR.trace)}주의 흔적</span>
-      <span>{pt(MAP_COLOR.found)}관측: 발견</span>
-      <span>{pt(MAP_COLOR.none)}관측: 없음</span>
+      {track && <span>{ln(MAP_COLOR.track, undefined, 2.5)}Path walked</span>}
+      {back && <span>{ln(MAP_COLOR.back, undefined, 8, 0.5)}Return route to rover</span>}
+      <span>{ln(MAP_COLOR.route)}Next leg</span>
+      <span>{ln(MAP_COLOR.hyp, "1 6")}Hypothesis (hover H to show)</span>
+      <span><svg width="26" height="12"><circle cx="13" cy="6" r="4.5" fill="none" stroke={MAP_COLOR.stop} strokeWidth="2.5" /></svg>Stop to visit</span>
+      <span><svg width="26" height="12"><circle cx="13" cy="6" r="4.5" fill="none" stroke={MAP_COLOR.hyp} strokeWidth="2.5" /></svg>Hypothesis target</span>
+      <span><svg width="26" height="12"><circle cx="13" cy="6" r="5.5" fill={MAP_COLOR.done} stroke="#07080a" /></svg>Visited</span>
+      <span>{pt(MAP_COLOR.trace)}Attention trace</span>
+      <span>{pt(MAP_COLOR.found)}Observation: found</span>
+      <span>{pt(MAP_COLOR.none)}Observation: none</span>
     </div>
   );
 }
@@ -158,19 +158,19 @@ export function MapView(p: MapProps) {
     if (!g) return;
     g.clearLayers();
     for (const s of p.meta.samples ?? [])
-      L.marker(ll(s.xy), { icon: dot("", 8, "", "sample"), interactive: true }).bindTooltip(`선행 시료 ${s.name}<br>${s.lithology}`).addTo(g);
+      L.marker(ll(s.xy), { icon: dot("", 8, "", "sample"), interactive: true }).bindTooltip(`Earlier sample ${s.name}<br>${s.lithology}`).addTo(g);
     // 가야 할 곳의 표식은 한 가지 모양이다: 아직 안 간 곳은 속 빈 고리(지점은 흰색, 가설 목표는 가설의 노란색),
     // 다녀온 곳은 같은 크기의 채워진 원(걸어온 길의 파란색). 다녀왔는지는 화면이 따지지 않고 스냅샷의 visited에 실려 온 것만 본다
     const seen = new Set((p.visited ?? []).map((v) => v.poi_id).filter(Boolean));
     for (const q of p.meta.pois) {
       const done = seen.has(q.id);
-      L.marker(ll(q.xy), { icon: stopIcon(q.id, done ? "done" : "") }).bindTooltip(`${q.name}${done ? " · 다녀옴" : ""} · 가치 ${q.value_mu ?? "–"} (분산 ${q.value_var ?? "–"})`).addTo(g);
+      L.marker(ll(q.xy), { icon: stopIcon(q.id, done ? "done" : "") }).bindTooltip(`${q.name}${done ? " · visited" : ""} · value ${q.value_mu ?? "–"} (variance ${q.value_var ?? "–"})`).addTo(g);
     }
     for (const v of p.visited ?? []) {
       if (v.poi_id || v.purpose !== "hyp_target") continue;
-      L.marker(ll(v.xy as XY), { icon: stopIcon("✓", "done") }).bindTooltip("가설 목표 · 다녀옴", { permanent: true, direction: "right", offset: [13, 0], className: "maplabel done" }).addTo(g);
+      L.marker(ll(v.xy as XY), { icon: stopIcon("✓", "done") }).bindTooltip("Hypothesis target · visited", { permanent: true, direction: "right", offset: [13, 0], className: "maplabel done" }).addTo(g);
     }
-    if (p.rover) L.marker(ll(p.rover), { icon: L.divIcon({ className: "", iconSize: [26, 26], iconAnchor: [13, 13], html: `<div class="mk rover" style="background:${MAP_COLOR.back}">R</div>` }) }).bindTooltip("로버").addTo(g);
+    if (p.rover) L.marker(ll(p.rover), { icon: L.divIcon({ className: "", iconSize: [26, 26], iconAnchor: [13, 13], html: `<div class="mk rover" style="background:${MAP_COLOR.back}">R</div>` }) }).bindTooltip("Rover").addTo(g);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [p.meta, p.rover?.[0], p.rover?.[1], JSON.stringify(p.visited ?? [])]);
 
@@ -183,8 +183,8 @@ export function MapView(p: MapProps) {
     // 그리는 순서 = 아래에서 위로: 귀환 경로(넓은 띠) → 걸어온 길 → 카드의 경로 → 다음에 갈 곳 → 표식.
     // 귀환 경로는 넓고 옅은 띠라서, 다음에 갈 곳이 로버일 때(프로그램이 두 선을 같은 길로 보낸다 — device/node.py)에도
     // 띠 위에 흰 선이 얹혀 둘 다 보인다. 화면은 두 선을 견줘 보지 않고 받은 대로 각각 그린다
-    if (p.back && p.back.length > 1) L.polyline(p.back.map(ll), { color: MAP_COLOR.back, weight: 9, opacity: 0.5, lineCap: "round", lineJoin: "round" }).bindTooltip("로버까지의 귀환 경로").addTo(g);
-    if (p.track && p.track.length > 1) line(g, p.track.map(ll), { color: MAP_COLOR.track, weight: 2.5, opacity: 0.95 }).bindTooltip("걸어온 길");
+    if (p.back && p.back.length > 1) L.polyline(p.back.map(ll), { color: MAP_COLOR.back, weight: 9, opacity: 0.5, lineCap: "round", lineJoin: "round" }).bindTooltip("Return route to rover").addTo(g);
+    if (p.track && p.track.length > 1) line(g, p.track.map(ll), { color: MAP_COLOR.track, weight: 2.5, opacity: 0.95 }).bindTooltip("Path walked");
     for (const o of p.options ?? []) {
       if (o.path.length < 2) continue;
       const c = MAP_COLOR.preview, pts = o.path.map((q) => ll(q as XY));
@@ -195,39 +195,39 @@ export function MapView(p: MapProps) {
       L.marker(pts[pts.length - 1], { icon: dot(c, 22, o.id, "opt") }).addTo(g);
       // 경로의 시작점 = 이 카드를 계산한 자리. 카드가 떠 있는 동안 걸으면 현재 위치와 벌어지므로, 선이 어디서 출발하는지 이름표로 알린다
       L.marker(pts[0], { icon: L.divIcon({ className: "", iconSize: [14, 14], iconAnchor: [7, 7], html: `<div class="mk from" style="border-color:${c}"></div>` }), zIndexOffset: -200, interactive: false })
-        .bindTooltip("카드를 계산한 자리", { permanent: true, direction: "left", offset: [-10, 0], className: "maplabel from" }).addTo(g);
+        .bindTooltip("Where the cards were computed", { permanent: true, direction: "left", offset: [-10, 0], className: "maplabel from" }).addTo(g);
     }
-    if (!p.hideRoute && p.route && p.route.length > 1) line(g, p.route.map(ll), { color: MAP_COLOR.route, weight: 3, opacity: 1 }).bindTooltip("다음에 갈 곳까지의 경로");
+    if (!p.hideRoute && p.route && p.route.length > 1) line(g, p.route.map(ll), { color: MAP_COLOR.route, weight: 3, opacity: 1 }).bindTooltip("Route to the next stop");
     // 가설 목표: 가설의 점선(사람이 넣은 방향·범위)과 실제로 가게 되는 자리는 다르다. 목표는 코어가 그 선 근처에서
     // 값이 가장 많이 오르고 걸어갈 수 있는 칸으로 고르고, 출발 한계에 안 맞으면 범위를 줄여 잡기 때문이다(core/src/decision.cpp).
     // 그래서 목표 자리를 고리와 이름표로 따로 표시한다. 가설의 기준점과 잇는 선은 그리지 않는다 — 가설의 점선과 겹쳐 보기 어려웠다.
     // 화면은 받은 정지점을 찍을 뿐이다 — 목표를 스스로 찾거나 가설과 짝을 지어 보지 않는다
     const hypTarget = (xy: XY, from: string) => L.marker(ll(xy), { icon: stopIcon("", "hyp"), zIndexOffset: -100 })
-      .bindTooltip(`가설 목표${from}`, { permanent: true, direction: "right", offset: [13, 0], className: "maplabel" }).addTo(g);
+      .bindTooltip(`Hypothesis target${from}`, { permanent: true, direction: "right", offset: [13, 0], className: "maplabel" }).addTo(g);
     // 이미 계획에 들어 있는 가설 목표는 아래에서 한 번만 표시한다(카드의 정지점에 같은 자리가 또 실려 와도 이름표를 겹쳐 찍지 않는다)
     const inPlan = new Set((p.plan ?? []).filter((x) => x.purpose === "hyp_target").map((x) => x.xy.join(",")));
     for (const o of p.options ?? []) {
       for (const st of o.stops) {
         if (st.purpose !== "hyp_target" || inPlan.has(st.xy.join(","))) continue;
-        hypTarget(st.xy as XY, ` · 카드 ${o.id}`);
+        hypTarget(st.xy as XY, ` · card ${o.id}`);
       }
     }
     for (const s of p.plan ?? []) {
       if (s.poi_id) continue;
       if (s.purpose === "hyp_target") hypTarget(s.xy as XY, "");
-      else L.circleMarker(ll(s.xy as XY), { radius: 8, color: MAP_COLOR.route, weight: 2, fillColor: MAP_COLOR.casing, fillOpacity: 0.35 }).bindTooltip(s.purpose === "rover" ? "로버" : "정지점").addTo(g);
+      else L.circleMarker(ll(s.xy as XY), { radius: 8, color: MAP_COLOR.route, weight: 2, fillColor: MAP_COLOR.casing, fillOpacity: 0.35 }).bindTooltip(s.purpose === "rover" ? "Rover" : "Stop").addTo(g);
     }
     for (const t of p.traces ?? [])
       L.circleMarker(ll(t.xy as XY), { radius: t.kind === "photo" ? 5 : 4, color: MAP_COLOR.trace, weight: t.kept ? 3 : 1, fillColor: MAP_COLOR.trace, fillOpacity: 0.15 + 0.6 * t.fade, opacity: 0.3 + 0.7 * t.fade })
-        .bindTooltip(t.kind === "photo" ? "주의 흔적: 촬영" : "주의 흔적: 언급").addTo(g);
+        .bindTooltip(t.kind === "photo" ? "Attention trace: photo" : "Attention trace: mention").addTo(g);
     for (const o of p.obs ?? []) {
       const mk = L.marker(ll(o.xy as XY), { icon: dot(o.found ? MAP_COLOR.found : MAP_COLOR.none, 16, o.found ? "✓" : "–") })
-        .bindTooltip(`${o.found ? "발견" : "없음"}${o.confirmed ? " · 다시 확인함" : ""}${o.note ? `<br>메모: ${escapeHtml(o.note)}` : ""}`);
+        .bindTooltip(`${o.found ? "Found" : "None"}${o.confirmed ? " · re-checked" : ""}${o.note ? `<br>Note: ${escapeHtml(o.note)}` : ""}`);
       mk.on("click", () => picks.current.obs?.(o.id));
       mk.addTo(g);
     }
     for (const h of p.hyps ?? []) {
-      const tip = `가설 ${h.hyp_id} · ${RULE[h.rule] ?? h.rule}<br>처음: ${h.conf_chosen_name} → 지금: ${h.conf_now_name} (확인된 관측 ${h.n_used}건)`;
+      const tip = `Hypothesis ${h.hyp_id} · ${RULE[h.rule] ?? h.rule}<br>At entry: ${h.conf_chosen_name} → now: ${h.conf_now_name} (${h.n_used} confirmed observations)`;
       // 기준점의 표식만 늘 그린다. 방향·범위의 점선은 아래의 따로 된 그리기에서, 올리거나 고른 가설 것만 그린다
       const mk = L.marker(ll(h.xy as XY), { icon: dot(MAP_COLOR.hyp, 18, "H") }).bindTooltip(tip);
       mk.on("click", () => picks.current.hyp?.(h.hyp_id));
@@ -264,7 +264,7 @@ export function MapView(p: MapProps) {
     if (!me.current) {
       me.current = {
         circle: L.circle(ll(p.pos), { radius: Math.max(1, p.sigma ?? 0), color: MAP_COLOR.me, weight: 1, fillOpacity: 0.15 }).addTo(m),
-        marker: L.marker(ll(p.pos), { icon: L.divIcon({ className: "", iconSize: [20, 20], iconAnchor: [10, 10], html: `<div class="mk me" style="background:${MAP_COLOR.me};color:${MAP_COLOR.me}"></div>` }), zIndexOffset: 1000 }).bindTooltip("현재 위치").addTo(m),
+        marker: L.marker(ll(p.pos), { icon: L.divIcon({ className: "", iconSize: [20, 20], iconAnchor: [10, 10], html: `<div class="mk me" style="background:${MAP_COLOR.me};color:${MAP_COLOR.me}"></div>` }), zIndexOffset: 1000 }).bindTooltip("Current position").addTo(m),
       };
       m.setView(ll(p.pos), 3, { animate: false });
     }

@@ -290,7 +290,7 @@ class RoverService:
             except bt.BtError:
                 nlt = None
         link_up = (t - self.last_rx_t) <= 5.0
-        alerts = [] if link_up else [f"기기 응답 없음 · {t - self.last_rx_t:.0f}초"]
+        alerts = [] if link_up else [f"No reply from device · {t - self.last_rx_t:.0f} s"]
         shown = [o.digest for o in self.open_dp.options] if self.open_dp else []
         crew = w.CrewStatus(node=self.crew_node, state=self.crew, last_rx_s=round(t - self.last_rx_t, 1), nlt=nlt, plan=self.plan, route=self._route)
         return w.ConsoleSnapshot(t=t, lmst=lmst, rover_pos=self.park_xy, candidates=self.candidates, shown_ids=shown, crew=crew, alerts=alerts,

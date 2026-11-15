@@ -17,24 +17,24 @@ export function OptionCard({ o, meta, text, onChoose }: { o: Option; meta: Meta 
       <div className="card-head">
         <span className="card-id">{o.id}</span>
         <span className="card-label">{LABEL[o.label_key] ?? o.label_key}</span>
-        <span className="card-kind">{KIND[o.kind]}{o.from_hypothesis ? " · 가설에서 나옴" : ""}{o.prior_only ? " · 바탕 지도만" : ""}</span>
+        <span className="card-kind">{KIND[o.kind]}{o.from_hypothesis ? " · from hypothesis" : ""}{o.prior_only ? " · prior map only" : ""}</span>
       </div>
       <dl>
-        <dt>시간</dt><dd>{approx(o.time_min)}</dd>
-        <dt>최대 경사 <SourceTip meta={meta} k="mobility.theta_max_deg" /></dt><dd>{o.max_slope_deg}°{o.over_limit.includes("max_slope_deg") && <em className="over">{OVER.max_slope_deg}</em>}</dd>
-        <dt>선량 <SourceTip meta={meta} k="radiation.dose_rate_mSv_day" /></dt><dd>{o.dose_uSv} µSv{o.over_limit.includes("dose_uSv") && <em className="over">{OVER.dose_uSv}</em>}</dd>
-        <dt>과학 가치</dt><dd>{GRADE[o.value_grade]} ({range})</dd>
-        <dt>분산</dt><dd>{o.value_var}</dd>
-        <dt>정보 이득</dt><dd>{o.info_gain}</dd>
-        <dt>흔적을 남긴 곳</dt><dd>{o.explore_count}곳</dd>
-        <dt>통신 두절 예상</dt><dd>{o.comm_loss_min}분</dd>
-        <dt>출발 한계 여유 <SourceTip meta={meta} k="suit.eva_max_h" /></dt>
-        <dd>{o.late ? `늦음 — 한계를 ${Math.abs(o.nlt_margin_min)}분 넘김` : `${o.nlt_margin_min}분`} <small>({BINDING[o.nlt_binding]})</small></dd>
-        <dt>귀환 비용</dt><dd>{approx(o.return_time_min)}</dd>
-        <dt>근거</dt><dd className="reasons">{o.reasons.map((r, i) => <span key={i} title={`레이어 ${r.source_id}${r.res_m ? ` · 칸 ${r.res_m} m` : ""}`}>{r.layer} {r.value}{r.unit}</span>)}</dd>
+        <dt>Time</dt><dd>{approx(o.time_min)}</dd>
+        <dt>Max slope <SourceTip meta={meta} k="mobility.theta_max_deg" /></dt><dd>{o.max_slope_deg}°{o.over_limit.includes("max_slope_deg") && <em className="over">{OVER.max_slope_deg}</em>}</dd>
+        <dt>Dose <SourceTip meta={meta} k="radiation.dose_rate_mSv_day" /></dt><dd>{o.dose_uSv} µSv{o.over_limit.includes("dose_uSv") && <em className="over">{OVER.dose_uSv}</em>}</dd>
+        <dt>Science</dt><dd>{GRADE[o.value_grade]} ({range})</dd>
+        <dt>Variance</dt><dd>{o.value_var}</dd>
+        <dt>Info gain</dt><dd>{o.info_gain}</dd>
+        <dt>Traces</dt><dd>{o.explore_count}</dd>
+        <dt>Comm loss</dt><dd>{o.comm_loss_min} min</dd>
+        <dt>Margin <SourceTip meta={meta} k="suit.eva_max_h" /></dt>
+        <dd>{o.late ? `Late — ${Math.abs(o.nlt_margin_min)} min past limit` : `${o.nlt_margin_min} min`} <small>({BINDING[o.nlt_binding]})</small></dd>
+        <dt>Return</dt><dd>{approx(o.return_time_min)}</dd>
+        <dt>Basis</dt><dd className="reasons">{o.reasons.map((r, i) => <span key={i} title={`Layer ${r.source_id}${r.res_m ? ` · cell ${r.res_m} m` : ""}`}>{r.layer} {r.value}{r.unit}</span>)}</dd>
       </dl>
       {text && <p className="card-text">{text}</p>}
-      {onChoose && <button type="button" className="choose" onClick={onChoose}>{o.id} 선택</button>}
+      {onChoose && <button type="button" className="choose" onClick={onChoose}>SELECT {o.id}</button>}
     </div>
   );
 }
