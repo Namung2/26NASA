@@ -86,6 +86,7 @@ class DeviceNode:
         self._out: list[w.Msg] = []
         self._snap: w.Snapshot | None = None
         self._frame: SensorFrame | None = None
+        self._plan_refused_t = -1e9                 # 끊긴 채로 "내 계획"을 보내려 한 시각 (그 뒤 10초 동안 알림을 띄운다)
         self._track: list[tuple[float, float]] = []   # 걸어온 길 (화면 표시용)
         self._visited: list[w.Stop] = []              # 다녀온 지점 (화면 표시용). 계획에서 빠진 정지점을 그대로 옮겨 담는다
 
@@ -196,7 +197,7 @@ class DeviceNode:
         elif self.plan:
             key = (round(f.pos[0] / self.cfg.grid_m), round(f.pos[1] / self.cfg.grid_m), self.plan[0].xy)
             if key != self._route_key:
-                p = core.plan(f.pos, self.plan[0].xy)
+                p = core.plan(f.pos, self.plan[0].xy, profile=bt.PROFILES.index(self.plan[0].profile))   # 갈림길에서 고른 성향의 길로 안내한다
                 self._route_key = key
                 if p.status >= 0:
                     self._route = [(float(x), float(y)) for x, y in core.path_polyline(p)]
@@ -261,6 +262,13 @@ class DeviceNode:
             self._hyp_reply(cmd.reply, pos, t)
         elif cmd.kind == "return":
             self.want_return = True                 # 다음 틱에 귀환 카드가 나온다
+        elif cmd.kind == "plan":
+            # 사람이 짠 순서: 로버에 보내 다른 선택지와 견줘 달라고 한다. 계획은 여기서 바꾸지 않는다 — 돌아온 카드를 골라야 바뀐다.
+            # 선택지는 로버가 계산하므로 끊겨 있으면 보내지 않고, 그 사실을 화면에 알린다
+            if self.link.mode == bt.LINK_LOCAL:
+                self._plan_refused_t = t
+            else:
+                self._out.append(w.PlanRequest(ch="uhf", seq=self.hb_seq, node=self.node, t_send=t, stops=cmd.stops))
         elif cmd.kind == "photo":
             cv.append_event(self.core, self.table, self.node, "trace", pos, t, w.TracePayload(kind="photo"))
             self.science_dirty = True
@@ -355,7 +363,8 @@ class DeviceNode:
         pending = sum(1 for e in self.table.by_id.values() if bt.NODE[e.node] == own and e.lts > self.acked.get(self.node, 0))
         tau_warn = self.cfg.dust_tau_warn > 0 and f.tau_dust > self.cfg.dust_tau_warn
         pos_warn = f.sigma > self.sigma_warn
-        notices = [tp.render_notice(k) for k, on in (("options_paused", self.options_paused), ("nlt_warn", nlt_warn), ("tau_warn", tau_warn), ("pos_warn", pos_warn)) if on]
+        notices = [tp.render_notice(k) for k, on in (("options_paused", self.options_paused), ("nlt_warn", nlt_warn), ("tau_warn", tau_warn), ("pos_warn", pos_warn),
+                                                          ("plan_needs_link", self.t - self._plan_refused_t < 10.0)) if on]
         return w.Snapshot(
             state=state, lmst=f.lmst, sigma_m=f.sigma, pos_warn=pos_warn, traces=self._views["traces"], obs=self._views["obs"],
             channels={"uhf": self._channel(self.link.uhf), "wifi": self._channel(self.link.wifi)},

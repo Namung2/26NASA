@@ -7,120 +7,120 @@
 version: 1
 
 suit:
-  eva_max_h:        {value: 8,    unit: h,   status: REF, source: "xEVA ConOps EVA-EXP-0042 Rev B (6±2 h, 최대 8) — REFERENCE §2.1"}
+  eva_max_h:        {value: 8,    unit: h,   status: REF, source: "xEVA ConOps EVA-EXP-0042 Rev B (6±2 h, max 8) — REFERENCE §2.1"}
 
 mobility:
   v_plan_kmh:       {value: 2.0,  unit: km/h, status: REF, source: "xEVA ConOps — REFERENCE §2.1"}
-  v_return_kmh:     {value: 2.7,  unit: km/h, status: REF, source: "ALSJ 아폴로 17 편집자 가정 — REFERENCE §3.1"}
-  slope_model:      {value: apollo_linear_steep_down, status: DESIGN, source: "θ ≥ −10°: v = 0.75 − 0.01·θ m/s (NASA ICES-2025-129 식 2). θ < −10°: 1°마다 9.5 % 감소 (SEXTANT 속도 표). 식은 core/src/mobility.cpp에 있다"}
-  theta_max_deg:    {value: 20,   unit: deg, status: REF, source: "NASA Artemis EVA 시험 요구(20° 경사 보행), NASA ICES-2025-129의 진입 금지 ±20° — REFERENCE §4"}
+  v_return_kmh:     {value: 2.7,  unit: km/h, status: REF, source: "ALSJ Apollo 17 editor's assumption — REFERENCE §3.1"}
+  slope_model:      {value: apollo_linear_steep_down, status: DESIGN, source: "θ ≥ −10°: v = 0.75 − 0.01·θ m/s (NASA ICES-2025-129 eq. 2). θ < −10°: 9.5 % slower per degree (SEXTANT speed table). The formula is in core/src/mobility.cpp"}
+  theta_max_deg:    {value: 20,   unit: deg, status: REF, source: "NASA Artemis EVA test requirement (walking on a 20° slope); ±20° keep-out in NASA ICES-2025-129 — REFERENCE §4"}
 
 radiation:
   dose_rate_mSv_day: {value: 0.67, unit: mSv/day, status: REF, source: "Hassler et al. Science 2013/14 (Curiosity RAD) — REFERENCE §4"}
-  spe_multiplier:    {value: null, placeholder: 10, status: TBD, source: "SCENARIOS §2.2 '배율 설정' — 수치 없음"}
+  spe_multiplier:    {value: null, placeholder: 10, status: TBD, source: "SCENARIOS §2.2 'multiplier setting' — no value given"}
 
 nav:
-  sigma_warn_m:     {value: 50,   unit: m, status: DESIGN, source: "오차 반경이 이 값을 넘으면 화면에 경고"}
+  sigma_warn_m:     {value: 50,   unit: m, status: DESIGN, source: "The screen warns when the position error radius exceeds this"}
 
 decision:
   obs_to_dp_max_min: {value: 2,    unit: min, status: DESIGN, source: "SCENARIOS §2.3 / §3.3"}
   metrics_tolerance: {value: 0.05, status: DESIGN, source: "SCENARIOS §3.3"}
-  eps_fork:          {value: 0.10, status: TUNE, source: "분기 트리거의 상대 비용 차"}
-  cooldown_s:        {value: 120,  unit: s,   status: TUNE, source: "같은 (종류, 원인)의 결정 지점을 다시 내지 않는 간격"}
-  stay_max_min:      {value: 20,   unit: min, status: TUNE, source: "머물기 옵션의 길이"}
-  stay_buffer_min:   {value: 2,    unit: min, status: TUNE, source: "머물기 옵션이 남기는 출발 한계 여유"}
-  hyp_snap_m:        {value: 50,   unit: m,   status: TUNE, source: "가설 목표를 찾는 반경"}
+  eps_fork:          {value: 0.10, status: TUNE, source: "Relative cost difference that triggers a route fork"}
+  cooldown_s:        {value: 120,  unit: s,   status: TUNE, source: "Interval during which a decision point with the same (kind, cause) is not raised again"}
+  stay_max_min:      {value: 20,   unit: min, status: TUNE, source: "Length of the stay option"}
+  stay_buffer_min:   {value: 2,    unit: min, status: TUNE, source: "Departure-limit margin the stay option leaves"}
+  hyp_snap_m:        {value: 50,   unit: m,   status: TUNE, source: "Search radius for a hypothesis target"}
   # time_min 0.1666667 = 10초. 걷는 시간은 "약 N분 M초"로 적는다(2026-11-14 결정). 10초 단위는 제안값이다
   display_precision: {value: {time_min: 0.1666667, max_slope_deg: 1, dose_uSv: 0.1, value: 0.1, value_var: 0.01, info_gain: 0.1, nlt_margin_min: 1, comm_loss_min: 1},
-                      status: DESIGN, source: "S4 §5 — 화면에서 같아 보이는 수치는 계산에서도 같은 값"}
+                      status: DESIGN, source: "S4 §5 — numbers that look the same on screen are the same value in the computation"}
 
 bundle:
   field_limit_mb:   {value: 50,   unit: MB, status: DESIGN, source: "PRD §7.3"}
   aoi_radius_max_m: {value: 5000, unit: m,  status: DESIGN, source: "PRD R-01"}
 
 placement:
-  work_radius_m:    {value: 2000, unit: m,  status: REF,    source: "xEVA ConOps 보행 '착륙선에서 ~2 km' — REFERENCE §2.1"}
+  work_radius_m:    {value: 2000, unit: m,  status: REF,    source: "xEVA ConOps walking range '~2 km from the lander' — REFERENCE §2.1"}
   max_from_rover_m: {value: 3500, unit: m,  status: REF,    source: "NASA ICES-2026-127 — REFERENCE §4"}
   rover_standoff_m: {value: 2000, unit: m,  status: DESIGN, source: "SCENARIOS §3.1"}
-  poi_min_sep_m:    {value: 300,  unit: m,  status: TUNE,   source: "POI 사이 최소 간격"}
-  p2_clear_radius_m: {value: 200, unit: m,  status: TUNE,   source: "발견 지점 주변 통과 가능 비율을 보는 반경"}
-  hyp_probe_m:      {value: 300,  unit: m,  status: TUNE,   source: "가설 방향을 고를 때 살펴보는 거리"}
+  poi_min_sep_m:    {value: 300,  unit: m,  status: TUNE,   source: "Minimum spacing between POIs"}
+  p2_clear_radius_m: {value: 200, unit: m,  status: TUNE,   source: "Radius used to check the passable fraction around the discovery point"}
+  hyp_probe_m:      {value: 300,  unit: m,  status: TUNE,   source: "Distance examined when choosing the hypothesis direction"}
 
 planner:
-  eps_schedule:     {value: [3.0, 1.5, 1.0], status: TUNE, source: "가중 A* ε 단계"}
-  snap_max_m:       {value: 20,   unit: m, status: TUNE, source: "통과불가 시작·목표의 스냅 한계"}
-  alt_overlap_max:  {value: 0.8,  status: TUNE, source: "대안 경로를 같은 경로로 보는 겹침률"}
-  corridor_m:       {value: 100,  unit: m, status: TUNE, source: "거친 격자 경로 주변을 고운 격자로 다시 푸는 폭"}
+  eps_schedule:     {value: [3.0, 1.5, 1.0], status: TUNE, source: "Weighted A* ε schedule"}
+  snap_max_m:       {value: 20,   unit: m, status: TUNE, source: "Snap limit for an impassable start or goal"}
+  alt_overlap_max:  {value: 0.8,  status: TUNE, source: "Overlap ratio above which an alternative route counts as the same route"}
+  corridor_m:       {value: 100,  unit: m, status: TUNE, source: "Width around the coarse-grid route that is re-solved on the fine grid"}
 
 cost:
   profiles:                         # 간선 비용의 가중 (경사, 거칠기, 그림자, 방사선) — SYSTEM §3.1
-    balanced:       {value: [1.0, 0.5, 0.3, 0.1], status: TUNE, source: "성향 0"}
-    fastest:        {value: [1.0, 0.0, 0.0, 0.0], status: TUNE, source: "성향 1 — 대안 경로용"}
-    gentle:         {value: [2.0, 1.0, 0.3, 0.1], status: TUNE, source: "성향 2 — 대안 경로용"}
-  rough_ref_m:      {value: 0.5,  unit: m, status: TUNE, source: "거칠기 정규화 기준"}
-  dose_ref:         {value: 27.9, unit: uSv/h, status: DESIGN, source: "radiation.dose_rate_mSv_day 0.67을 시간당으로 바꾼 값 — 평상시가 1"}
+    balanced:       {value: [1.0, 0.5, 0.3, 0.1], status: TUNE, source: "Profile 0"}
+    fastest:        {value: [1.0, 0.0, 0.0, 0.0], status: TUNE, source: "Profile 1 — for alternative routes"}
+    gentle:         {value: [2.0, 1.0, 0.3, 0.1], status: TUNE, source: "Profile 2 — for alternative routes"}
+  rough_ref_m:      {value: 0.5,  unit: m, status: TUNE, source: "Roughness normalisation reference"}
+  dose_ref:         {value: 27.9, unit: uSv/h, status: DESIGN, source: "radiation.dose_rate_mSv_day 0.67 converted to an hourly rate — nominal conditions = 1"}
 
 terrain:
-  roughness_win_m:   {value: 15,   unit: m, status: TUNE, source: "거칠기 창"}
-  shadow_bins:       {value: 8,    status: TUNE, source: "그림자 시간 구간 수"}
-  horizon_max_m:     {value: 2000, unit: m, status: TUNE, source: "그림자를 드리울 지형을 찾는 최대 거리"}
+  roughness_win_m:   {value: 15,   unit: m, status: TUNE, source: "Roughness window"}
+  shadow_bins:       {value: 8,    status: TUNE, source: "Number of shadow time bins"}
+  horizon_max_m:     {value: 2000, unit: m, status: TUNE, source: "Maximum distance searched for terrain that casts a shadow"}
 
 science:
-  l0_m:                   {value: 50,     unit: m, status: TUNE, source: "관측이 퍼지는 길이"}
-  aniso_ratio:            {value: 4,      status: TUNE, source: "층서연속 장축/단축"}
-  exposure_slope_ref_deg: {value: 20,     unit: deg, status: TUNE, source: "침식 노출 경사 가중 기준"}
-  obs_noise:              {value: 0.05,   status: TUNE, source: "관측 잡음 분산"}
-  unconfirmed_factor:     {value: 4,      status: TUNE, source: "확인 안 된 관측의 잡음 배율"}
-  tau_s:                  {value: 1800,   unit: s, status: DESIGN, source: "주의 흔적이 살아 있는 시간 — 한 지점의 작업 시간 약 30분에서 유도 (REFERENCE §3.2, §4.3)"}
-  trace_bucket_s:         {value: 60,     unit: s, status: TUNE, source: "지도 재계산을 묶는 시간 폭 (호스트)"}
-  r_obs_m:                {value: 20,     unit: m, status: TUNE, source: "경로에서 관측 가능한 반경"}
-  w_transit:              {value: 0.25,   status: TUNE, source: "통과 구간의 관측 가중"}
-  A_ref_m2:               {value: 400,    unit: m2, status: TUNE, source: "가치 정규화 기준 면적"}
-  r_plan:                 {value: 0.05,   status: TUNE, source: "정보 이득 계산용 가정 잡음"}
-  touch_eps:              {value: 0.05,   status: TUNE, source: "관측이 닿았다고 보는 커널 가중의 하한"}
-  var_floor:              {value: 0.0001, status: TUNE, source: "관측 갱신 뒤 분산의 하한"}
-  default_res_m:          {value: 20,     unit: m, status: TUNE, source: "광물 래스터가 없을 때의 과학 격자"}
+  l0_m:                   {value: 50,     unit: m, status: TUNE, source: "Length scale over which an observation spreads"}
+  aniso_ratio:            {value: 4,      status: TUNE, source: "Strata continuity long axis / short axis"}
+  exposure_slope_ref_deg: {value: 20,     unit: deg, status: TUNE, source: "Slope weighting reference for erosion exposure"}
+  obs_noise:              {value: 0.05,   status: TUNE, source: "Observation noise variance"}
+  unconfirmed_factor:     {value: 4,      status: TUNE, source: "Noise multiplier for an unconfirmed observation"}
+  tau_s:                  {value: 1800,   unit: s, status: DESIGN, source: "How long an attention trace stays alive — derived from about 30 min of work at one site (REFERENCE §3.2, §4.3)"}
+  trace_bucket_s:         {value: 60,     unit: s, status: TUNE, source: "Time window that batches map recomputation (host)"}
+  r_obs_m:                {value: 20,     unit: m, status: TUNE, source: "Radius observable from the route"}
+  w_transit:              {value: 0.25,   status: TUNE, source: "Observation weight for transit segments"}
+  A_ref_m2:               {value: 400,    unit: m2, status: TUNE, source: "Reference area for value normalisation"}
+  r_plan:                 {value: 0.05,   status: TUNE, source: "Assumed noise for the information-gain computation"}
+  touch_eps:              {value: 0.05,   status: TUNE, source: "Lower bound of kernel weight for a cell to count as touched by an observation"}
+  var_floor:              {value: 0.0001, status: TUNE, source: "Lower bound of variance after an observation update"}
+  default_res_m:          {value: 20,     unit: m, status: TUNE, source: "Science grid used when there is no mineral raster"}
 
 env:
-  dust_tau_warn:    {value: 0.414, status: DESIGN, source: "먼지 광학 두께(9 µm 적외선 값) 경고. Jezero의 실측 기록(Smith 2022, sol 15~400, 5분 간격 56,368점) 가운데 95 %가 이 값 아래다 — 번들을 만들 때 다시 계산해 메타의 env.tau_p95_record에 적는다. 95 %라는 기준은 우리 선택. 가시광 tau의 임계가 아니다(REFERENCE §6.2)"}
-  dust_hold_s:      {value: 300, unit: s, status: DESIGN, source: "먼지가 임계 위에 이만큼 이어져야 넘은 것으로 보고 결정 지점을 낸다. 기록의 측정 간격(Smith 2022, 중앙값 4.99분) — 측정 한 번의 흔들림으로는 묻지 않고, 잇단 두 측정이 모두 임계 위일 때 묻는다. 화면의 경고 표시는 기다리지 않는다"}
+  dust_tau_warn:    {value: 0.414, status: DESIGN, source: "Dust optical depth warning (9 µm infrared value). 95 % of the measured record at Jezero (Smith 2022, sols 15–400, 56,368 points at 5-minute spacing) lies below this value — recomputed when the bundle is built and written to env.tau_p95_record in the metadata. The 95 % criterion is our choice. It is not a threshold for visible-band tau (REFERENCE §6.2)"}
+  dust_hold_s:      {value: 300, unit: s, status: DESIGN, source: "Dust must stay above the threshold this long before it counts as crossed and a decision point is raised. This is the measurement spacing of the record (Smith 2022, median 4.99 min) — a single noisy measurement does not ask; two consecutive measurements above the threshold do. The on-screen warning does not wait"}
 
 safety:
-  dose_warn_uSv:     {value: null, unit: uSv, status: TBD, source: "출처 있는 값을 찾기 전에는 비워 둔다 — 비어 있으면 선량은 표시만 한다"}
-  k_return:          {value: 1.0,  status: TUNE, source: "귀환 시간 안전계수"}
-  nlt_warn_min:      {value: 20,   unit: min, status: DESIGN, source: "아폴로 17의 첫 경고가 출발 한계 20분 전 — REFERENCE §3.1"}
-  nlt_force_min:     {value: 7,    unit: min, status: DESIGN, source: "아폴로 17의 마지막 호출 '7분' — REFERENCE §3.1"}
-  sunset_margin_min: {value: 30,   unit: min, status: TUNE, source: "일몰 전 귀환 여유"}
-  sunset_warn_min:   {value: 60,   unit: min, status: TUNE, source: "일몰 경고"}
+  dose_warn_uSv:     {value: null, unit: uSv, status: TBD, source: "Left empty until a sourced value is found — when empty, dose is displayed only"}
+  k_return:          {value: 1.0,  status: TUNE, source: "Safety factor on return time"}
+  nlt_warn_min:      {value: 20,   unit: min, status: DESIGN, source: "Apollo 17's first warning came 20 min before the departure limit — REFERENCE §3.1"}
+  nlt_force_min:     {value: 7,    unit: min, status: DESIGN, source: "Apollo 17's last call, '7 minutes' — REFERENCE §3.1"}
+  sunset_margin_min: {value: 30,   unit: min, status: TUNE, source: "Return margin before sunset"}
+  sunset_warn_min:   {value: 60,   unit: min, status: TUNE, source: "Sunset warning"}
 
 link:
   # 로버 ↔ 우주복 UHF 링크가 되는 곳을 번들에 구워 둘 때 쓰는 값 (pipeline/terrain.py link_mask, 근거: REFERENCE §4.4).
   # 화성 선외활동용 우주복 무선기의 공개된 제원이 없어서 달 탐사 자료의 값을 빌렸다 — 빌린 값이라는 것을 숨기지 않는다.
   radio:
-    freq_mhz:          {value: 401,   unit: MHz, status: DESIGN, source: "가정. xEVA ConOps는 'UHF'라고만 한다. 401 MHz는 Foore & Ida 2007(NASA/TM-2007-214825)이 달 표면 UHF로 분석한 주파수이고 Perseverance의 UHF 안테나도 약 400 MHz"}
-    antenna_rover_h_m: {value: 3.0,   unit: m,   status: REF,    source: "Foore & Ida 2007의 로버 안테나 높이 3 m. NASA SEV(여압 로버 개념)의 높이 10 ft = 3.05 m(NASA SEV fact sheet). 돛대를 세우면 6~10 m(Hwu 등 2008, LSR-M 2023)"}
-    antenna_suit_h_m:  {value: 2.0,   unit: m,   status: REF,    source: "Foore & Ida 2007, Hwu 등 2008, Nokia 2024가 쓰는 우주인 안테나 높이 2 m. 아폴로는 1.83 m(MSC-05161 Suppl. 6 p. 1-3)"}
-    loss_allow_db:     {value: 126.8, unit: dB,  status: REF,    source: "빌린 값: 아폴로 15 우주복→착륙선 VHF 링크의 실측 한계. 송신 +25.7 dBm, 우주복 안테나 −2.0 dB, 케이블 −1.9 dB, 수신 한계 −105 dBm → 25.7 − 2.0 − 1.9 + 105 = 126.8 dB (NASA MSC-05161 Suppl. 6, 1972, p. 2-7·2-13)"}
-    fade_margin_db:    {value: 9.77,  unit: dB,  status: REF,    source: "Foore & Ida 2007 Table I, 401 MHz 로버(3 m)→우주인(2 m): 평균 3.25 dB + 2 × 표준편차 3.26 dB. 표준편차의 2배(약 95 %)로 잡은 것은 우리 선택. Nokia 2024의 그늘 여유 10 dB와 비슷하다"}
+    freq_mhz:          {value: 401,   unit: MHz, status: DESIGN, source: "Assumption. xEVA ConOps says only 'UHF'. 401 MHz is the frequency Foore & Ida 2007 (NASA/TM-2007-214825) analysed for lunar-surface UHF, and Perseverance's UHF antenna is also about 400 MHz"}
+    antenna_rover_h_m: {value: 3.0,   unit: m,   status: REF,    source: "Rover antenna height 3 m in Foore & Ida 2007. NASA SEV (pressurised rover concept) is 10 ft = 3.05 m tall (NASA SEV fact sheet). With a mast, 6–10 m (Hwu et al. 2008, LSR-M 2023)"}
+    antenna_suit_h_m:  {value: 2.0,   unit: m,   status: REF,    source: "Astronaut antenna height 2 m as used by Foore & Ida 2007, Hwu et al. 2008 and Nokia 2024. Apollo used 1.83 m (MSC-05161 Suppl. 6 p. 1-3)"}
+    loss_allow_db:     {value: 126.8, unit: dB,  status: REF,    source: "Borrowed value: the measured limit of the Apollo 15 suit-to-lander VHF link. Transmit +25.7 dBm, suit antenna −2.0 dB, cable −1.9 dB, receive threshold −105 dBm → 25.7 − 2.0 − 1.9 + 105 = 126.8 dB (NASA MSC-05161 Suppl. 6, 1972, pp. 2-7, 2-13)"}
+    fade_margin_db:    {value: 9.77,  unit: dB,  status: REF,    source: "Foore & Ida 2007 Table I, 401 MHz rover (3 m) → astronaut (2 m): mean 3.25 dB + 2 × standard deviation 3.26 dB. Using twice the standard deviation (about 95 %) is our choice. Close to the 10 dB shadowing margin in Nokia 2024"}
   hb_hz:            {value: 1,    unit: Hz, status: DESIGN, source: "SYSTEM §3.9"}
-  sync_batch:       {value: 16,   status: TUNE, source: "동기화 메시지 하나에 싣는 이벤트 수 (호스트)"}
-  path_max_pts:     {value: 32,   status: TUNE, source: "결정 지점을 UHF로 보낼 때 옵션 하나의 경로에 싣는 점의 최대 개수 (호스트)"}
-  wifi_range_m:     {value: 300,  unit: m, status: TUNE, source: "시뮬에서 Wi-Fi가 된다고 보는 로버까지의 거리 — 가정 (호스트)"}
-  lost_dp_s:        {value: 120,  unit: s,  status: TUNE, source: "UHF 두절이 이만큼 이어지면 선택지 정지"}
+  sync_batch:       {value: 16,   status: TUNE, source: "Number of events carried in one sync message (host)"}
+  path_max_pts:     {value: 32,   status: TUNE, source: "Maximum number of points per option path when a decision point is sent over UHF (host)"}
+  wifi_range_m:     {value: 300,  unit: m, status: TUNE, source: "Distance to the rover within which the simulator treats Wi-Fi as available — assumption (host)"}
+  lost_dp_s:        {value: 120,  unit: s,  status: TUNE, source: "Options are paused when UHF loss lasts this long"}
   uhf:  &channel
-    timeout_ms:     {value: 500,  unit: ms, status: TUNE, source: "하트비트 응답 한계"}
-    n_down:         {value: 5,    status: TUNE, source: "연속 미응답 횟수 — 방식은 RFC 5880과 같고 횟수는 제안값"}
-    n_up:           {value: 3,    status: TUNE, source: "복구 판정 연속 응답 횟수"}
-    ewma_alpha:     {value: 0.3,  status: TUNE, source: "손실률 이동평균"}
-    loss_down:      {value: 0.85, status: TUNE, source: "손실률 임계 — 연속 5번(0.83)보다 먼저 발동하지 않게"}
-    rtt_down_ms:    {value: 400,  unit: ms, status: TUNE, source: "왕복 시간 평균의 임계"}
+    timeout_ms:     {value: 500,  unit: ms, status: TUNE, source: "Heartbeat reply timeout"}
+    n_down:         {value: 5,    status: TUNE, source: "Number of consecutive missed replies — same scheme as RFC 5880; the count is a proposed value"}
+    n_up:           {value: 3,    status: TUNE, source: "Number of consecutive replies needed to declare recovery"}
+    ewma_alpha:     {value: 0.3,  status: TUNE, source: "Moving average of the loss rate"}
+    loss_down:      {value: 0.85, status: TUNE, source: "Loss-rate threshold — set so it does not fire before five consecutive misses (0.83)"}
+    rtt_down_ms:    {value: 400,  unit: ms, status: TUNE, source: "Threshold on the mean round-trip time"}
   wifi: *channel
 
 # 화면 메뉴의 단계 → 값 (호스트만 쓴다. 코어에는 고른 값이 들어간다)
 menu:
-  extent_levels_m:    {value: [100, 300, 1000], unit: m, status: TUNE, source: "가설 메뉴의 범위 3단계"}
-  confidence_levels:  {value: [0.17, 0.5, 0.83], status: DESIGN, source: "가설 메뉴의 확신 3단계(가능성 낮음 / 반반 / 가능성 높음). IPCC 가능성 척도 구간(0~33 / 33~66 / 66~100 %)의 가운데 — REFERENCE §4.3"}
-  mark_radius_levels_m: {value: [10, 30, 100], unit: m, status: TUNE, source: "막힘 표시의 반경 3단계"}
-  arrive_radius_m:    {value: 10, unit: m, status: TUNE, source: "정지점에 닿았다고 보는 거리 (호스트가 계획에서 지난 지점을 뺄 때)"}
-  note_max_chars:     {value: 200, status: TUNE, source: "자유 메모 한 건의 글자 수 상한"}
-  trace_snapshot_max: {value: 64, status: TUNE, source: "화면에 보내는 주의 흔적의 최대 개수"}
+  extent_levels_m:    {value: [100, 300, 1000], unit: m, status: TUNE, source: "Three extent levels in the hypothesis menu"}
+  confidence_levels:  {value: [0.17, 0.5, 0.83], status: DESIGN, source: "Three confidence levels in the hypothesis menu (unlikely / about as likely as not / likely). Midpoints of the IPCC likelihood-scale ranges (0–33 / 33–66 / 66–100 %) — REFERENCE §4.3"}
+  mark_radius_levels_m: {value: [10, 30, 100], unit: m, status: TUNE, source: "Three radius levels for a blocked mark"}
+  arrive_radius_m:    {value: 10, unit: m, status: TUNE, source: "Distance at which a stop counts as reached (when the host removes passed stops from the plan)"}
+  note_max_chars:     {value: 200, status: TUNE, source: "Maximum characters in one free-text note"}
+  trace_snapshot_max: {value: 64, status: TUNE, source: "Maximum number of attention traces sent to the screen"}

@@ -61,6 +61,7 @@ class Stop(M):
     poi_id: str | None = None
     dwell_min: float = 0.0
     purpose: Literal["poi", "hyp_target", "landmark", "rover"]
+    profile: Literal["balanced", "fastest", "gentle"] = "balanced"   # 이 정지점까지 가는 길의 성향. 경로 갈림길에서 고른 길을 계획이 기억한다
 
 
 # ── §2 이벤트 — 현장에서 저장·동기화되는 유일한 것 ────────────────────────
@@ -294,6 +295,13 @@ class ReturnFieldMsg(Msg):
     shape: tuple[int, int]
 
 
+class PlanRequest(Msg):
+    """기기 → 로버: 사람이 화면에서 직접 짠 정지점 순서를 다른 선택지와 견줘 달라는 요청. 로버가 계산해 결정 지점(DpMsg)으로 답한다.
+    선택지는 로버가 만들므로 연결돼 있을 때만 보낸다. 이것만으로 계획이 바뀌지는 않는다 — 카드에서 골라야 바뀐다."""
+    type: Literal["plan_request"] = "plan_request"
+    stops: Annotated[list[Stop], Field(min_length=1, max_length=8)]
+
+
 class PhotoSync(Msg):
     type: Literal["photo_sync"] = "photo_sync"
     event_id: str
@@ -458,6 +466,14 @@ class CmdPhoto(M):
     kind: Literal["photo"] = "photo"
 
 
+class CmdPlan(M):
+    """사람이 지도에서 정지점을 차례로 눌러 짠 순서(화면의 "경로 재설정"). 보낸다고 계획이 바뀌지 않는다:
+    로버가 이 순서를 선택지 하나("custom_plan")로 계산해 다른 카드 옆에 띄우고, 그 카드를 골라야 계획이 된다.
+    출발 한계 안에 끝나지 않으면 카드 대신 알림(custom_plan_unreachable)이 온다. 로버와 끊겨 있으면 받지 않는다(plan_needs_link)."""
+    kind: Literal["plan"] = "plan"
+    stops: Annotated[list[Stop], Field(min_length=1, max_length=8)]   # 지점은 poi_id와 xy, 가설 목표는 purpose="hyp_target"과 xy. dwell_min은 그 지점에 머물 시간
+
+
 class CmdMark(M):
     kind: Literal["mark"] = "mark"
     what: Literal["poi", "blocked"]
@@ -466,7 +482,7 @@ class CmdMark(M):
     note: str = ""
 
 
-Command = Annotated[CmdChoose | CmdObs | CmdHyp | CmdHypReply | CmdHypWithdraw | CmdReturn | CmdPhoto | CmdMark, Field(discriminator="kind")]
+Command = Annotated[CmdChoose | CmdObs | CmdHyp | CmdHypReply | CmdHypWithdraw | CmdReturn | CmdPhoto | CmdMark | CmdPlan, Field(discriminator="kind")]
 
 
 class ScreenCmd(M):

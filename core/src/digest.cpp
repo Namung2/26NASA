@@ -32,7 +32,7 @@ uint64_t bt_option_digest(const bt_option* o) {
   h = fnv(h, o->value_grade); h = fnv(h, o->nlt_binding);
   for (uint32_t i = 0; i < o->n_stops && i < BT_MAX_STOPS; ++i) {
     const bt_stop& s = o->stops[i];
-    h = fnv(h, s.xy.x); h = fnv(h, s.xy.y); h = fnv(h, s.dwell_min); h = fnv(h, s.purpose); h = fnv(h, s.poi);
+    h = fnv(h, s.xy.x); h = fnv(h, s.xy.y); h = fnv(h, s.dwell_min); h = fnv(h, s.purpose); h = fnv(h, s.poi); h = fnv(h, s.profile);
   }
   h = fnv(h, o->path_len);
   h = fnv(h, o->time_min); h = fnv(h, o->max_slope_deg); h = fnv(h, o->dose_uSv);

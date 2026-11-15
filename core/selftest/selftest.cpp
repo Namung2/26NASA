@@ -880,7 +880,8 @@ static void test_coarse_to_fine() {
   st.pos = cxy(5, 10, 40); st.t = 3600.0; st.node = BT_NODE_SUIT_A;
   bt_stop plan[2]; std::memset(plan, 0, sizeof(plan));
   plan[0].xy = cxy(5, 20, 50); plan[0].dwell_min = 10; plan[0].poi = 1; plan[1].xy = cxy(5, 45, 45); plan[1].dwell_min = 10; plan[1].poi = 2;
-  bt_trigger f0; std::memset(&f0, 0, sizeof(f0)); f0.kind = BT_TRIG_FORK; f0.cause_kind = BT_CAUSE_ROUTE;
+  // 환경 트리거로 묻는다(후보 전부가 나온다). 경로 갈림길 트리거는 실제로 다른 길이 있을 때만 선택지를 낸다
+  bt_trigger f0; std::memset(&f0, 0, sizeof(f0)); f0.kind = BT_TRIG_ENV; f0.cause_kind = BT_CAUSE_SHADOW;
   bt_decision d;
   CHECK(bt_decide(rv.ctx, &st, plan, 2, nullptr, 0, &f0, &d) == BT_OK && d.n_options >= 2);
   for (uint32_t i = 0; i < d.n_options; ++i) {

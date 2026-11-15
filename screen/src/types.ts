@@ -74,6 +74,12 @@ export interface CmdPhoto {
   kind: "photo";
 }
 
+/** 사람이 지도에서 정지점을 차례로 눌러 짠 순서(화면의 "경로 재설정"). 보낸다고 계획이 바뀌지 않는다: */
+export interface CmdPlan {
+  kind: "plan";
+  stops: Stop[];
+}
+
 export interface CmdReturn {
   kind: "return";
 }
@@ -298,7 +304,7 @@ export interface Reason {
 /** 화면 → 프로그램. 화면은 응답을 기다리지 않는다 — 결과는 다음 스냅샷에 나타난다. */
 export interface ScreenCmd {
   type: "command";
-  cmd: CmdChoose | CmdObs | CmdHyp | CmdHypReply | CmdHypWithdraw | CmdReturn | CmdPhoto | CmdMark;
+  cmd: CmdChoose | CmdObs | CmdHyp | CmdHypReply | CmdHypWithdraw | CmdReturn | CmdPhoto | CmdMark | CmdPlan;
 }
 
 /** 기기 프로그램 → 현장 화면. 틱마다 전체를 보낸다. 화면이 계산해 채우는 필드는 없다. */
@@ -356,6 +362,7 @@ export interface Stop {
   poi_id: string | null;
   dwell_min: number;
   purpose: "poi" | "hyp_target" | "landmark" | "rover";
+  profile: "balanced" | "fastest" | "gentle";
 }
 
 export interface TraceEvent {

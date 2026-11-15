@@ -25,6 +25,31 @@ inline bool same_stops(const bt_stop* a, uint32_t na, const bt_stop* b, uint32_t
   return true;
 }
 
+// 두 칸 경로가 서로 가장 멀리 벌어지는 거리(m): 한쪽의 어느 칸에서 다른 쪽까지의 가장 가까운 거리 가운데 가장 큰 값(양쪽 모두).
+// 경로 갈림길에서 "다른 길"인지 가리는 데 쓴다. 8방향 격자에서는 비용이 같은 길이 칸만 다르게 여러 개 나오는데, 곧게 펴면 같은 선이다 —
+// 칸이 겹치는 비율만으로는 그런 길을 다른 길로 잘못 본다. 관측 반경(r_obs_m) 안에서만 벌어지는 두 길은 같은 것을 보며 걷는 같은 길이다
+double path_separation(const bt_ctx* c, const bt_cell* a, uint32_t na, double res_a, const bt_cell* b, uint32_t nb, double res_b) {
+  const Geom ga{c->cfg.cost_grid.origin.x, c->cfg.cost_grid.origin.y, res_a, 0, 0};
+  const Geom gb{c->cfg.cost_grid.origin.x, c->cfg.cost_grid.origin.y, res_b, 0, 0};
+  double worst = 0.0;
+  for (int side = 0; side < 2; ++side) {            // 상한: 2 · na · nb
+    const bt_cell* p = side ? b : a; const bt_cell* q = side ? a : b;
+    const uint32_t np = side ? nb : na, nq = side ? na : nb;
+    const Geom& gp = side ? gb : ga; const Geom& gq = side ? ga : gb;
+    for (uint32_t i = 0; i < np; ++i) {
+      const bt_xy x = cell_center(gp, p[i].row, p[i].col);
+      double best = D_INF;
+      for (uint32_t j = 0; j < nq; ++j) {
+        const bt_xy y = cell_center(gq, q[j].row, q[j].col);
+        const double d2 = (x.x - y.x) * (x.x - y.x) + (x.y - y.y) * (x.y - y.y);
+        if (d2 < best) best = d2;
+      }
+      if (best > worst) worst = best;
+    }
+  }
+  return std::sqrt(worst);
+}
+
 // 정지점 사이를 플래너로 이어 경로 풀의 off부터 쓴다. 정지점이 없으면 지금 선 칸 하나.
 // 구간마다 칸 크기가 달라지면(*mixed) 한 경로로 이을 수 없다
 bool build_route_ex(bt_ctx* c, bt_xy start, const bt_stop* stops, uint32_t n, uint32_t off, uint32_t* out_len,
@@ -54,6 +79,7 @@ bool build_route_ex(bt_ctx* c, bt_xy start, const bt_stop* stops, uint32_t n, ui
     std::memset(&leg, 0, sizeof(leg));
     leg.cells = D.pool + at;
     leg.cap = D.pool_cap - at;
+    bud.profile = stops[k].profile < BT_MAX_PROFILES ? stops[k].profile : 0;   // 그 정지점까지 가는 길의 성향(갈림길에서 사람이 고른 것)
     if (plan_ex(c, cur, stops[k].xy, &bud, &leg, refine) < 0) return false;
     if (!path_reaches(c, &leg, stops[k].xy)) return false;   // 정지점에 닿지 못한 길(예산 소진, 반경 밖)로는 옵션을 만들지 않는다
     if (k == 0) {
@@ -319,10 +345,16 @@ void pareto_select(const bt_ctx* c, uint8_t* chosen) {
   }
   if (hyp >= 0 && n_chosen < max_n) { chosen[hyp] = 1; n_chosen += 1; }
   for (uint32_t i = 0; i < n && n_chosen < max_n; ++i) {       // 철회한 사람이 돌아갈 길
-    if (D.cand[i].label_key == BT_LABEL_RESTORE_PLAN && !chosen[i]) { chosen[i] = 1; n_chosen += 1; }
+    if ((D.cand[i].label_key == BT_LABEL_RESTORE_PLAN || D.cand[i].label_key == BT_LABEL_CUSTOM_PLAN) && !chosen[i]) { chosen[i] = 1; n_chosen += 1; }   // 사람이 짠 계획도 반드시 보인다
+  }
+  // 경로 갈림길에서 나온 길들: "계획 유지"(지금 성향의 길)와 나란히 보인다 — 어느 길로 갈지를 묻는 결정 지점이기 때문이다
+  bool has_alt = false;
+  for (uint32_t i = 0; i < n; ++i) if (D.cand[i].label_key == BT_LABEL_ROUTE_FASTEST || D.cand[i].label_key == BT_LABEL_ROUTE_GENTLE) has_alt = true;
+  for (uint32_t i = 0; i < n && n_chosen < max_n; ++i) {
+    if (D.cand[i].label_key == BT_LABEL_CONTINUE_PLAN && (front[i] || has_alt) && !chosen[i]) { chosen[i] = 1; n_chosen += 1; }
   }
   for (uint32_t i = 0; i < n && n_chosen < max_n; ++i) {
-    if (D.cand[i].label_key == BT_LABEL_CONTINUE_PLAN && front[i] && !chosen[i]) { chosen[i] = 1; n_chosen += 1; }
+    if ((D.cand[i].label_key == BT_LABEL_ROUTE_FASTEST || D.cand[i].label_key == BT_LABEL_ROUTE_GENTLE) && !chosen[i]) { chosen[i] = 1; n_chosen += 1; }
   }
   // 나머지는 정규화한 목적 공간에서 이미 고른 것과 가장 먼 것부터
   double lo[N_OBJ], span[N_OBJ];
@@ -378,7 +410,7 @@ uint64_t inputs_digest(const bt_ctx* c, const bt_state* st, const bt_stop* plan,
     const uint32_t n = pass ? n_prev : n_plan;
     h = fnv(h, n);
     for (uint32_t k = 0; k < n; ++k) {
-      h = fnv(h, s[k].xy.x); h = fnv(h, s[k].xy.y); h = fnv(h, s[k].dwell_min); h = fnv(h, s[k].purpose); h = fnv(h, s[k].poi);
+      h = fnv(h, s[k].xy.x); h = fnv(h, s[k].xy.y); h = fnv(h, s[k].dwell_min); h = fnv(h, s[k].purpose); h = fnv(h, s[k].poi); h = fnv(h, s[k].profile);
     }
   }
   h = fnv(h, tr->kind); h = fnv(h, tr->forced); h = fnv(h, tr->cause_kind); h = fnv(h, tr->cause_lts); h = fnv(h, tr->cause_node);
@@ -517,7 +549,9 @@ bt_status bt_triggers(bt_ctx* c, const bt_state* now, const bt_state* prev, cons
           for (uint32_t a = 1; a < na; ++a) {
             double ca, la;
             if (!cells_cost(c, alt[a].cells, alt[a].len, 0, &ca, &la)) continue;
-            if (std::fabs(ca - c0) / c0 < static_cast<double>(c->cfg.eps_fork)) {     // 서로 다른 경로의 비용이 비슷하다
+            if (std::fabs(ca - c0) / c0 < static_cast<double>(c->cfg.eps_fork) &&       // 서로 다른 경로의 비용이 비슷하고
+                path_separation(c, alt[0].cells, alt[0].len, alt[0].res_m, alt[a].cells, alt[a].len, alt[a].res_m)
+                    > static_cast<double>(c->cfg.r_obs_m)) {                                 // 실제로 다른 곳을 지난다
               t[k].kind = BT_TRIG_FORK; t[k].cause_kind = BT_CAUSE_ROUTE; k += 1;
               new_leg_fork = true;
               break;
@@ -557,7 +591,9 @@ bt_status bt_decide(bt_ctx* c, const bt_state* st, const bt_stop* plan, uint32_t
   if (n_plan > BT_MAX_STOPS || n_prev > BT_MAX_STOPS || tr->kind > BT_TRIG_USER_REQUEST || tr->kind == BT_TRIG_LINK_LOST) return BT_ERR_ARG;
   FieldView fv;
   if (!field_view(c, &fv) || !c->env_set) return BT_ERR_NOT_READY;
-  const bool return_only = (tr->kind == BT_TRIG_SAFETY || tr->kind == BT_TRIG_USER_REQUEST);
+  // 사람이 직접 짠 계획을 견줘 달라는 요청: prev_plan 자리에 그 정지점들이 온다. 다른 선택지와 나란히 계산해 보인다
+  const bool custom = tr->kind == BT_TRIG_USER_REQUEST && tr->cause_kind == BT_CAUSE_PLAN;
+  const bool return_only = (tr->kind == BT_TRIG_SAFETY || (tr->kind == BT_TRIG_USER_REQUEST && !custom));
   if (!return_only) {
     if (c->cfg.options_mode != BT_OPTMODE_PARETO) return BT_ERR_ARG;        // 선택지는 로버만 만든다
     if (!c->cm.built || !c->s.g || !c->sci.ready) return BT_ERR_NOT_READY;
@@ -575,11 +611,36 @@ bt_status bt_decide(bt_ctx* c, const bt_state* st, const bt_stop* plan, uint32_t
   out->node = cfg.node; out->ts = st->t;
 
   if (!return_only) {
-    // 후보는 생성 순 = 라벨 순으로 고정: 계획 유지 → 가설 → 되돌리기 → 마지막 포기 → 머물기 → 귀환
+    // 후보는 생성 순 = 라벨 순으로 고정: 계획 유지 → (갈림길이면) 가장 빠른 길·완만한 길 → 가설 → 되돌리기 → 마지막 포기 → 머물기 → 귀환
     if (n_plan > 0) add_candidate(c, st, BT_OPT_ROUTE, BT_LABEL_CONTINUE_PLAN, 0, plan, n_plan, false);
 
-    const bool want_restore = n_prev > 0 && !same_stops(prev_plan, n_prev, plan, n_plan);
-    const uint32_t reserve = (want_restore ? 1u : 0u) + (n_plan >= 2 ? 1u : 0u) + 2u;
+    // 경로 갈림길: 다음 정지점까지를 다른 성향으로 가는 길을 선택지로 낸다. 결정 지점을 띄운 까닭("비슷한 길이 둘 이상 있다")과
+    // 묻는 내용이 같아야 한다. 정지점은 그대로이고 첫 정지점의 성향만 다르다. 표시 수치가 이미 나온 길과 전부 같으면 내지 않는다
+    if (n_plan > 0 && tr->kind == BT_TRIG_FORK && tr->cause_kind == BT_CAUSE_ROUTE && D.n_cand > 0) {
+      const uint8_t alt_profile[2] = {1, 2};
+      const uint8_t alt_label[2] = {BT_LABEL_ROUTE_FASTEST, BT_LABEL_ROUTE_GENTLE};
+      for (int a = 0; a < 2; ++a) {
+        if (plan[0].profile == alt_profile[a]) continue;           // 지금 계획이 이미 그 성향이다 = "계획 유지"와 같은 길
+        bt_stop alt[BT_MAX_STOPS];
+        for (uint32_t k = 0; k < n_plan; ++k) alt[k] = plan[k];
+        alt[0].profile = alt_profile[a];
+        const uint32_t n_before = D.n_cand, pool_before = D.pool_len;
+        if (!add_candidate(c, st, BT_OPT_ROUTE, alt_label[a], 0, alt, n_plan, false)) continue;
+        bool dup = false;
+        const bt_option& nw = D.cand[n_before];
+        for (uint32_t i = 0; i < n_before && !dup; ++i) {
+          const bt_option& old = D.cand[i];
+          dup = same_numbers(old, nw) ||
+                path_separation(c, D.pool + old.path_off, old.path_len, D.cand_res[i], D.pool + nw.path_off, nw.path_len, D.cand_res[n_before])
+                    <= static_cast<double>(cfg.r_obs_m);
+        }
+        if (dup) { D.n_cand = n_before; D.pool_len = pool_before; }   // 눈에 같은 길 → 뺀다
+      }
+    }
+
+    const bool want_restore = !custom && n_prev > 0 && !same_stops(prev_plan, n_prev, plan, n_plan);
+    const bool want_custom = custom && n_prev > 0 && !same_stops(prev_plan, n_prev, plan, n_plan);   // 지금 계획과 같으면 "계획 유지"다
+    const uint32_t reserve = ((want_restore || want_custom) ? 1u : 0u) + (n_plan >= 2 ? 1u : 0u) + 2u;
     const uint32_t room = BT_MAX_CANDIDATES > D.n_cand + reserve ? BT_MAX_CANDIDATES - D.n_cand - reserve : 0;
     const uint32_t nh = c->sci.n_hyps;
     bool hyp_late = false, hyp_flat = false;                                // 가설 옵션이 못 나온 까닭: 출발 한계 / 지도에 더한 것이 없음
@@ -615,6 +676,9 @@ bt_status bt_decide(bt_ctx* c, const bt_state* st, const bt_stop* plan, uint32_t
     if (hyp_flat) out->notices = static_cast<uint16_t>(out->notices | BT_NOTICE_HYP_NO_EFFECT);
 
     if (want_restore) add_candidate(c, st, BT_OPT_ROUTE, BT_LABEL_RESTORE_PLAN, 0, prev_plan, n_prev, false);
+    // 사람이 짠 계획: 출발 한계를 넘기거나 길이 없으면 만들지 않고(넘기는 옵션은 만들지 않는다) 그 사실을 알린다
+    if (want_custom && !add_candidate(c, st, BT_OPT_ROUTE, BT_LABEL_CUSTOM_PLAN, 0, prev_plan, n_prev, false))
+      out->notices = static_cast<uint16_t>(out->notices | BT_NOTICE_CUSTOM_UNREACHABLE);
     if (n_plan >= 2) add_candidate(c, st, BT_OPT_ROUTE, BT_LABEL_DROP_LAST, 0, plan, n_plan - 1, false);
 
     bt_nlt nl;
@@ -658,6 +722,12 @@ bt_status bt_decide(bt_ctx* c, const bt_state* st, const bt_stop* plan, uint32_t
   }
   out->n_options = static_cast<uint8_t>(no);
 
+  // 경로 갈림길인데 고를 다른 길이 하나도 남지 않았으면 묻지 않는다 — 띄운 까닭과 묻는 내용이 어긋난 카드를 내지 않는다
+  if (tr->kind == BT_TRIG_FORK && tr->cause_kind == BT_CAUSE_ROUTE) {
+    bool any_alt = false;
+    for (uint32_t i = 0; i < no; ++i) if (out->options[i].label_key == BT_LABEL_ROUTE_FASTEST || out->options[i].label_key == BT_LABEL_ROUTE_GENTLE) any_alt = true;
+    if (!any_alt) { out->n_options = 0; no = 0; }
+  }
   // 경로 갈림길인데 표시 수치가 전부 같으면 묻지 않는다 (S3a §6.4)
   if (tr->kind == BT_TRIG_FORK && tr->cause_kind == BT_CAUSE_ROUTE && no >= 2) {
     bool all_same = true;

@@ -143,3 +143,50 @@ def test_v1_return_path_from_blocked_cell_snaps():
         assert n.degraded == 1 and math.isfinite(n.t_depart)
     assert dev.return_path(mb.ROOM).status == bt.ERR_UNREACHABLE      # 갇힌 방의 한가운데는 여전히 길 없음
     assert rb is not None
+
+
+def _walk_home(dev, start, park, max_s: int = 4000) -> tuple[bool, float]:
+    """기기가 내는 귀환 경로를 1초씩 따라 걷는다(시뮬레이터의 걷기와 같은 식). (로버에 닿았나, 가장 길게 뒤로 물러난 거리 m)."""
+    pos, closest, back = start, math.dist(start, park), 0.0
+    for _ in range(max_s):
+        if math.dist(pos, park) <= 12.0:
+            return True, back
+        rp = dev.return_path(pos)
+        if rp.status != bt.OK:
+            return False, back
+        pts = [tuple(q) for q in dev.path_polyline(rp)]
+        m = dev.path_measure(rp, state_at(pos), bt.WALK_RETURN)
+        step = m.length_m / (m.time_min * 60.0) if m.time_min > 0.05 else 0.75
+        for q in pts[1:] or [park]:
+            d = math.dist(pos, q)
+            if d <= step:
+                pos, step = q, step - d
+            else:
+                pos = (pos[0] + (q[0] - pos[0]) * step / d, pos[1] + (q[1] - pos[1]) * step / d)
+                break
+        closest = min(closest, math.dist(pos, park))
+        back = max(back, math.dist(pos, park) - closest)
+    return False, back
+
+
+def test_v1_following_return_path_always_arrives(seeded):
+    """귀환 경로를 따라 걸으면 반드시 로버에 닿는다 — 도중에 앞뒤로 오가며 서지 않는다.
+
+    기기는 로버가 넘겨준 귀환 지도(4 m 칸)를 자기 격자(5 m)의 통과 가능 여부로 곧게 펴서 걷는다. 곧게 편 선이 귀환 지도에서는
+    막힌 칸을 지날 수 있고, 그 칸에 섰을 때 경로의 시작 칸을 잘못 고르면 뒤로 돌아가게 된다(2026-11-15에 다른 구역에서 실제로 났다).
+    """
+    rover, _rb = make_core("rover")
+    t, nx, fres = rover.field_copy()
+    dev, db = make_core("device", field=False)
+    dev.set_field(t, nx, fres)
+    ok = base_passable(db, dev.cfg.theta_max_deg)
+    tried = 0
+    for _ in range(40):
+        xy = random_passable_xy(seeded, ok, db.res_m)
+        if dev.return_path(xy).status != bt.OK:
+            continue                                   # 갇힌 방 등 — 길이 없다
+        arrived, back = _walk_home(dev, xy, mb.PARK)
+        assert arrived, f"{xy}에서 출발해 로버에 닿지 못했다(뒤로 {back:.0f} m)"
+        assert back <= 2 * fres + 1.0, f"{xy}: 로버에서 {back:.1f} m 멀어졌다"
+        tried += 1
+    assert tried >= 20

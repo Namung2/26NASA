@@ -60,6 +60,19 @@ MAX_PHOTO_BYTES = 12 * 1024 * 1024  # 사진 한 장의 상한. 문서에 정해
 MAX_TICKS_PER_PUSH = 200      # 한 번에 미는 시뮬 틱의 상한 — 배속을 너무 높여도 서버가 멈추지 않게
 
 
+class FreshStatic(StaticFiles):
+    """정적 파일을 내주되 브라우저가 매번 서버에 "바뀌었나"를 묻게 한다(Cache-Control: no-cache).
+
+    이 머리말이 없으면 브라우저가 번들의 meta.json이나 화면 파일을 제멋대로 한동안 붙들고 있어서, 번들을 다시 만들거나 화면을 다시
+    빌드해도 옛것이 보인다. 바뀌지 않았으면 서버가 "그대로"(304)라고만 답하므로 다시 내려받지는 않는다.
+    """
+
+    async def get_response(self, path: str, scope):
+        r = await super().get_response(path, scope)
+        r.headers["Cache-Control"] = "no-cache"
+        return r
+
+
 # 요청 본문. 모듈 맨 위에 둬야 한다 — 함수 안에 두면 FastAPI가 타입 이름을 찾지 못해 본문으로 읽지 않는다
 class StartBody(BaseModel):
     scenario: str
@@ -307,10 +320,10 @@ def make_app(bundle_root: str, scenario: str | None, speed: float, manual: bool)
         finally:
             drv.consoles.discard(ws)
 
-    app.mount("/bundle", StaticFiles(directory=bundle_root), name="bundle")
+    app.mount("/bundle", FreshStatic(directory=bundle_root), name="bundle")
     dist = ROOT / "screen/dist"
     if dist.exists():
-        app.mount("/", StaticFiles(directory=dist, html=True), name="screen")
+        app.mount("/", FreshStatic(directory=dist, html=True), name="screen")
     return app
 
 

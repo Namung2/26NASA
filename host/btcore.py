@@ -33,7 +33,7 @@ from pathlib import Path
 
 import numpy as np
 
-ABI_VERSION = 5      # core/include/btcore.h의 BT_ABI_VERSION과 같아야 한다
+ABI_VERSION = 6      # core/include/btcore.h의 BT_ABI_VERSION과 같아야 한다
 
 # ── 용량 상수 (헤더의 BT_MAX_*) ──────────────────────────────────────────
 MAX_OPTIONS, MAX_CANDIDATES, MAX_STOPS, MAX_REASONS, MAX_HYPS, MAX_NODES = 3, 8, 8, 4, 16, 8
@@ -56,15 +56,16 @@ RULES = ["strata_continuity", "proximity", "unit_boundary", "erosion_exposure"]
 LINK_FULL, LINK_LOCAL = 0, 1
 STOP_PURPOSES = ["poi", "hyp_target", "landmark", "rover"]
 OPT_KINDS = ["route", "stay", "return"]
-LABEL_KEYS = ["continue_plan", "hyp_target", "restore_plan", "drop_last", "stay", "return_rover"]
+LABEL_KEYS = ["continue_plan", "route_fastest", "route_gentle", "hyp_target", "restore_plan", "custom_plan", "drop_last", "stay", "return_rover"]
+PROFILES = ["balanced", "fastest", "gentle"]      # bt_stop.profile, bt_budget.profile — 정지점까지 가는 길의 성향
 OPTF_FROM_HYPOTHESIS, OPTF_PRIOR_ONLY, OPTF_LATE = 1, 2, 4
 OVER_MAX_SLOPE, OVER_DOSE = 1, 2
 GRADES = ["LOW", "MED", "HIGH"]
 BINDINGS = ["sunset", "eva_max"]
 TRIGGERS = ["fork", "env", "link_lost", "safety", "user_request"]
 TRIG_FORK, TRIG_ENV, TRIG_LINK_LOST, TRIG_SAFETY, TRIG_USER_REQUEST = range(5)
-CAUSES = ["route", "obs", "hyp", "other", "spe", "nlt", "sunset", "return", "dust", "shadow", "link"]
-NOTICE_HYP_UNREACHABLE, NOTICE_NO_FEASIBLE_RETURN, NOTICE_HYP_NO_EFFECT = 1, 2, 4
+CAUSES = ["route", "obs", "hyp", "other", "spe", "nlt", "sunset", "return", "dust", "shadow", "link", "plan"]
+NOTICE_HYP_UNREACHABLE, NOTICE_NO_FEASIBLE_RETURN, NOTICE_HYP_NO_EFFECT, NOTICE_CUSTOM_UNREACHABLE = 1, 2, 4, 8
 DT_F32, DT_U16, DT_U8, DT_BITS = range(4)
 LAYER = {"slope": 0, "elev": 1, "roughness": 2, "shadow": 3, "los": 4, "mu0": 5, "var0": 6, "units": 7, "terrain_class": 8}
 WALK_PLAN, WALK_RETURN = 0, 1
@@ -154,7 +155,7 @@ class BtConfig(C.Structure):
 
 
 class BtStop(C.Structure):
-    _fields_ = [("xy", BtXY), ("dwell_min", f32), ("purpose", u8), ("poi", u8)]
+    _fields_ = [("xy", BtXY), ("dwell_min", f32), ("purpose", u8), ("poi", u8), ("profile", u8), ("_pad", u8)]
 
 
 class BtReason(C.Structure):

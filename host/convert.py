@@ -130,12 +130,14 @@ def to_bt_stop(s: w.Stop, poi_index: dict[str, int]) -> bt.BtStop:
     b.xy = bt.BtXY(float(s.xy[0]), float(s.xy[1]))
     b.dwell_min, b.purpose = float(s.dwell_min), bt.STOP_PURPOSES.index(s.purpose)
     b.poi = poi_index.get(s.poi_id, bt.POI_NONE) if s.poi_id else bt.POI_NONE
+    b.profile = bt.PROFILES.index(s.profile)
     return b
 
 
 def from_bt_stop(b: bt.BtStop, poi_ids: list[str]) -> w.Stop:
     pid = poi_ids[b.poi - 1] if 1 <= b.poi <= len(poi_ids) else None
-    return w.Stop(xy=(b.xy.x, b.xy.y), poi_id=pid, dwell_min=round(float(b.dwell_min), 2), purpose=bt.STOP_PURPOSES[b.purpose])
+    return w.Stop(xy=(b.xy.x, b.xy.y), poi_id=pid, dwell_min=round(float(b.dwell_min), 2), purpose=bt.STOP_PURPOSES[b.purpose],
+                  profile=bt.PROFILES[b.profile] if b.profile < len(bt.PROFILES) else "balanced")
 
 
 def _thin(pts: list, max_pts: int) -> list:
@@ -179,7 +181,7 @@ def decision_from_bt(core: bt.Core, d: bt.BtDecision, poi_ids: list[str], max_pt
     cause_name = bt.CAUSES[d.cause_kind]
     by_event = cause_name in ("obs", "hyp")
     notices = [name for bit, name in ((bt.NOTICE_HYP_UNREACHABLE, "hyp_unreachable_within_nlt"), (bt.NOTICE_NO_FEASIBLE_RETURN, "no_feasible_return"),
-                                     (bt.NOTICE_HYP_NO_EFFECT, "hyp_no_effect")) if d.notices & bit]
+                                     (bt.NOTICE_HYP_NO_EFFECT, "hyp_no_effect"), (bt.NOTICE_CUSTOM_UNREACHABLE, "custom_plan_unreachable")) if d.notices & bit]
     return w.DecisionPoint(
         dp_id=f"{bt.NODE_NAME[d.node]}:dp-{d.seq:02d}", trigger=bt.TRIGGERS[d.trigger],
         cause=f"{bt.NODE_NAME.get(d.cause_node, '?')}:{d.cause_lts}" if by_event else cause_name,

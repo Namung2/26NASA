@@ -38,7 +38,7 @@
 #   표에 없는 단위        → 값 없음 (지도에 "근거 없음"으로 보인다. 보존 가능성을 말한 문헌을 찾지 못했다)
 #   표에 없는 (단위, 광물) → 그 단위의 값만 쓴다 (원칙 ⑤)
 version: 1
-status: "전문가 검토 전 예시값. 보정된 확률이 아니라 문헌의 순서 등급을 옮긴 상대 지수"
+status: "Example values, not yet expert-reviewed. Not a calibrated probability — a relative index carried over from ordinal grades in the literature"
 
 grade_scale: {"-": 0.125, "+": 0.375, "++": 0.625, "+++": 0.875}
 

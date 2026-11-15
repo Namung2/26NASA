@@ -15,7 +15,7 @@ from . import wire as w
 
 BANNED = ("추천", "권장", "최적", "best", "recommended", "optimal", "should")
 
-LABEL = {"continue_plan": "Keep plan", "hyp_target": "Hypothesis target", "restore_plan": "Back to earlier plan", "drop_last": "Drop last stop",
+LABEL = {"continue_plan": "Keep plan", "route_fastest": "Fastest route", "route_gentle": "Gentlest route", "hyp_target": "Hypothesis target", "restore_plan": "Back to earlier plan", "custom_plan": "My plan", "drop_last": "Drop last stop",
          "stay": "Stay here", "return_rover": "Return to rover"}
 GRADE = {"LOW": "Low", "MED": "Medium", "HIGH": "High"}
 RULE = {"strata_continuity": "Strata continuity", "proximity": "Proximity cluster", "unit_boundary": "Unit boundary", "erosion_exposure": "Erosion exposure"}
@@ -32,9 +32,12 @@ HEADER = {
     ("user_request", "other"): "Return was requested.",
 }
 CAUSE = {"dust": "Dust passed the warning threshold.", "shadow": "The shadow time bin changed.", "sunset": "The margin to sunset shrank.",
-         "nlt": "The departure limit was reached. Time to return to the rover.", "spe": "Solar particle alert. Take shelter in the rover."}
+         "nlt": "The departure limit was reached. Time to return to the rover.", "spe": "Solar particle alert. Take shelter in the rover.",
+         "plan": "Your plan, shown next to the other options."}
 NOTICE = {
     "hyp_unreachable_within_nlt": "The hypothesis target cannot be visited within the departure limit, so it is not among the options.",
+    "custom_plan_unreachable": "Your plan cannot be completed within the departure limit, so it is not among the options.",
+    "plan_needs_link": "Your plan can be compared only while the rover link is up.",
     "hyp_no_effect": "The hypothesis did not raise map values in that direction, so there is no hypothesis target.",
     "no_feasible_return": "No route to the rover was found.",
     "bundle_mismatch": "The device and the rover hold different map bundles.",

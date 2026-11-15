@@ -20,14 +20,14 @@ products:                           # 받은 원천 자료. 받는 곳과 내용
     source: "USGS Astrogeology"
     product_id: "Mars 2020 Terrain Relative Navigation HiRISE DTM Mosaic (DOI 10.5066/P9REJ9JN)"
     resolution_m: 1.0
-    license: "USGS 공개 자료(퍼블릭 도메인)"
+    license: "USGS public data (public domain)"
   # 기준 그림: 고도 자료와 한 벌로 나온 CTX 정사 모자이크. 다른 바탕 위에 만들어진 자료(지질 단위)를 여기에 맞춘다
   reference_image:
     path: "자료/m2020_trn_ctx/JEZ_ctx_B_soc_008_orthoMosaic_6m_Eqc_latTs0_lon0.tif"
     source: "USGS Astrogeology"
     product_id: "Mars 2020 TRN CTX Orthomosaic (DOI 10.5066/P9GV1ND3)"
     resolution_m: 6.0
-    license: "USGS 공개 자료(퍼블릭 도메인)"
+    license: "USGS public data (public domain)"
   minerals:
     path: "자료/mineral_parente2021/jezeroFinal.tif"
     source: "Parente, Itoh, Saranathan 2021 (Zenodo)"
@@ -45,7 +45,7 @@ products:                           # 받은 원천 자료. 받는 곳과 내용
     source: "USGS (Sun & Stack 2020)"
     product_id: "SIM 3464 Geologic Map of Jezero Crater and the Nili Planum Region (DOI 10.3133/sim3464)"
     resolution_m: null              # 1:75,000 벡터
-    license: "퍼블릭 도메인"
+    license: "Public domain"
     # 지질 단위 지도는 고도 자료와 100 m쯤 어긋나 있다 — 지도의 선이 다른 바탕 그림(아래 base_image) 위에 그려졌기 때문이다.
     # 번들을 만들 때마다 그 바탕 그림을 기준 그림(reference_image)에 맞춰 보고, 구한 변환으로 폴리곤을 옮긴다.
     # 손으로 적는 이동량은 없다. 방법·결과·남은 오차는 pipeline/register.py 머리말과 번들 메타의 registration에 있다.
@@ -68,10 +68,10 @@ weather:
     source: "Smith 2022, Perseverance MEDA/TIRS aerosol retrievals, Mendeley Data V1, doi 10.17632/48phhtkcj8.1 (CC BY 4.0)"
   air_temp:
     path: "자료/meda_sol313/WE__0313___________CAL_ATS_________________P01.CSV"
-    source: "NASA PDS Atmospheres Node, Mars 2020 MEDA 번들 CAL_ATS sol 313, doi 10.17189/1522849"
+    source: "NASA PDS Atmospheres Node, Mars 2020 MEDA bundle CAL_ATS sol 313, doi 10.17189/1522849"
 
 rover_parks:                        # 로버 주차점. 링크 지도를 이 자리에서 굽는다
-  - {id: park1, lon_e: 77.451, lat_n: 18.445, note: "Perseverance 착륙 지점(Octavia E. Butler Landing)"}
+  - {id: park1, lon_e: 77.451, lat_n: 18.445, note: "Perseverance landing site (Octavia E. Butler Landing)"}
 
 pois:
   - {id: P1, name: "P1", xy: [3400, -2900], kind: feature}
@@ -88,27 +88,27 @@ pois:
 #         세륨이나 실리카 결함 같은 무기물로도 설명된다고 본다. 확인된 검출도, "없다"는 보고도 없다 — 시료를 지구에서
 #         분석해야 정해진다. 그래서 "발견"으로도 "없음"으로도 넣지 않았다.
 samples:
-  - {id: S01, name: "Roubion (Guillaumes)", cores: ["Roubion(대기 시료만)"], lon_e: 77.45167282, lat_n: 18.4276677, lithology: "세립~중립 고철질, 화성암 추정", organics: null,
-     note: "형광 신호 보고. 실리카 결함 같은 무기물 기원 가능", source: "PDS Initial Reports vol.1; Sharma 2023; Scheller 2024"}
-  - {id: S02, name: "Rochette (Bellegarde)", cores: ["Montdenier", "Montagnac"], lon_e: 77.44432638, lat_n: 18.43073498, lithology: "세립 고철질, 현무암 추정", organics: null,
-     note: "방향족 유기물로 보이는 형광 보고. 뒤의 분석은 인과 상관(무기물 가능)", source: "PDS Initial Reports vol.1; Sharma 2023; Scheller 2024"}
-  - {id: S03, name: "Brac (Dourbes)", cores: ["Salette", "Coulettes"], lon_e: 77.44305448, lat_n: 18.43398032, lithology: "감람석 집적암", organics: null,
-     note: "낮은 농도의 유기물 보고. 뒤의 분석은 인산염 속 세륨과 일치", source: "PDS Initial Reports vol.1; Scheller 2024"}
-  - {id: S04, name: "Issole (Quartier)", cores: ["Robine", "Malay"], lon_e: 77.44134387, lat_n: 18.4326357, lithology: "감람석 집적암", organics: null,
-     note: "황산염과 함께 유기 화합물 보고(바닥에서 가장 강한 사례). 세륨 대안 설명 있음", source: "PDS Initial Reports vol.1; Sharma 2023; Scheller 2024"}
-  - {id: S05, name: "Sid (Alfalfa)", cores: ["Ha'ahóni", "Atsá"], lon_e: 77.45242176, lat_n: 18.44386406, lithology: "현무암질 안산암 추정", organics: null,
-     note: "낮은 농도의 유기물 보고. 뒤의 분석은 인·실리카 상과 상관", source: "PDS Initial Reports vol.1; Sharma 2023; Scheller 2024"}
-  - {id: S06, name: "Skinner Ridge (Thornton Gap)", cores: ["Swift Run", "Skyland"], lon_e: 77.40617493, lat_n: 18.45893136, lithology: "세립~중립 사암, 탄산염 포함", organics: null,
-     note: "형광은 인산염·황산염 속 세륨과 더 맞는다. 삼각주 전면 시료 중 유기물 보존 가능성이 가장 낮다고 평가", source: "Bosak 2024; Herd 2025"}
-  - {id: S07, name: "Wildcat Ridge (Berry Hollow)", cores: ["Hazeltop", "Bearwallow"], lon_e: 77.40588851, lat_n: 18.45863707, lithology: "황산염 포함 조립 이암", organics: null,
-     note: "황산염과 묶인 형광 다수(유기물일 수 있음). 확실한 검출은 아님. 보존 가능성은 시료 중 가장 높다고 평가", source: "PDS Initial Reports vol.2; Bosak 2024; Broz 2024 LPSC; Herd 2025"}
-  - {id: S08, name: "Amalik (Novarupta)", cores: ["Shuyak", "Mageik"], lon_e: 77.40144029, lat_n: 18.45072631, lithology: "감람석 포함 조립 이암", organics: null,
-     note: "약한 형광. 세륨과 더 맞는다", source: "PDS Initial Reports vol.2; Bosak 2024"}
-  - {id: S09, name: "Hidden Harbor (Uganik Island)", cores: ["Kukaklek"], lon_e: 77.39911421, lat_n: 18.45363597, lithology: "황산염 포함 세립 사암", organics: null,
-     note: "경석고 안의 강한 형광(방향족과 일치, 무기물일 수도). 보존 가능성 높다고 평가", source: "PDS Initial Reports vol.2; Bosak 2024; Broz 2024 LPSC"}
-  - {id: S10, name: "Observation Mountain", cores: ["Atmo Mountain", "Crosswind Lake"], lon_e: 77.40121811, lat_n: 18.45131442, lithology: "표토(거대 연흔)", organics: null,
-     note: "라만 신호 없는 형광. 희토류·실리카 결함과 일치, 유기물 배제 못 함", source: "PDS Initial Reports vol.2; Herd 2025"}
-  - {id: S11, name: "Berea (Solva)", cores: ["Melyn"], lon_e: 77.38394465, lat_n: 18.47021736, lithology: "중립 사암, 탄산염 포함, 하천", organics: null,
-     note: "약한 형광(무기물 또는 방향족). 유기물의 라만 신호 없음", source: "PDS Initial Reports vol.3"}
-  - {id: DEPOT, name: "Three Forks 시료 보관소", cores: ["튜브 10개(복제본)"], lon_e: 77.40823, lat_n: 18.45296, lithology: "", organics: null,
-     note: "2022-12 ~ 2023-01에 튜브 10개를 내려놓은 곳(구역의 가운데)", source: "PDS mars2020_sample_depot_three_forks; NASA 2023-01-30"}
+  - {id: S01, name: "Roubion (Guillaumes)", cores: ["Roubion (atmospheric sample only)"], lon_e: 77.45167282, lat_n: 18.4276677, lithology: "Fine- to medium-grained mafic, inferred igneous", organics: null,
+     note: "Fluorescence signal reported. May be of inorganic origin such as silica defects", source: "PDS Initial Reports vol.1; Sharma 2023; Scheller 2024"}
+  - {id: S02, name: "Rochette (Bellegarde)", cores: ["Montdenier", "Montagnac"], lon_e: 77.44432638, lat_n: 18.43073498, lithology: "Fine-grained mafic, inferred basalt", organics: null,
+     note: "Fluorescence resembling aromatic organics reported. Later analysis found a correlation with phosphorus (possibly inorganic)", source: "PDS Initial Reports vol.1; Sharma 2023; Scheller 2024"}
+  - {id: S03, name: "Brac (Dourbes)", cores: ["Salette", "Coulettes"], lon_e: 77.44305448, lat_n: 18.43398032, lithology: "Olivine cumulate", organics: null,
+     note: "Low-concentration organics reported. Later analysis is consistent with cerium in phosphate", source: "PDS Initial Reports vol.1; Scheller 2024"}
+  - {id: S04, name: "Issole (Quartier)", cores: ["Robine", "Malay"], lon_e: 77.44134387, lat_n: 18.4326357, lithology: "Olivine cumulate", organics: null,
+     note: "Organic compounds reported together with sulfate (the strongest case on the crater floor). A cerium alternative explanation exists", source: "PDS Initial Reports vol.1; Sharma 2023; Scheller 2024"}
+  - {id: S05, name: "Sid (Alfalfa)", cores: ["Ha'ahóni", "Atsá"], lon_e: 77.45242176, lat_n: 18.44386406, lithology: "Inferred basaltic andesite", organics: null,
+     note: "Low-concentration organics reported. Later analysis found a correlation with phosphorus and silica phases", source: "PDS Initial Reports vol.1; Sharma 2023; Scheller 2024"}
+  - {id: S06, name: "Skinner Ridge (Thornton Gap)", cores: ["Swift Run", "Skyland"], lon_e: 77.40617493, lat_n: 18.45893136, lithology: "Fine- to medium-grained sandstone, carbonate-bearing", organics: null,
+     note: "The fluorescence fits cerium in phosphate and sulfate better. Rated the lowest organic preservation potential among the delta-front samples", source: "Bosak 2024; Herd 2025"}
+  - {id: S07, name: "Wildcat Ridge (Berry Hollow)", cores: ["Hazeltop", "Bearwallow"], lon_e: 77.40588851, lat_n: 18.45863707, lithology: "Sulfate-bearing coarse mudstone", organics: null,
+     note: "Many fluorescence detections associated with sulfate (may be organic). Not a definitive detection. Rated the highest preservation potential among the samples", source: "PDS Initial Reports vol.2; Bosak 2024; Broz 2024 LPSC; Herd 2025"}
+  - {id: S08, name: "Amalik (Novarupta)", cores: ["Shuyak", "Mageik"], lon_e: 77.40144029, lat_n: 18.45072631, lithology: "Olivine-bearing coarse mudstone", organics: null,
+     note: "Weak fluorescence. Fits cerium better", source: "PDS Initial Reports vol.2; Bosak 2024"}
+  - {id: S09, name: "Hidden Harbor (Uganik Island)", cores: ["Kukaklek"], lon_e: 77.39911421, lat_n: 18.45363597, lithology: "Sulfate-bearing fine-grained sandstone", organics: null,
+     note: "Strong fluorescence within anhydrite (consistent with aromatics, possibly inorganic). Rated high preservation potential", source: "PDS Initial Reports vol.2; Bosak 2024; Broz 2024 LPSC"}
+  - {id: S10, name: "Observation Mountain", cores: ["Atmo Mountain", "Crosswind Lake"], lon_e: 77.40121811, lat_n: 18.45131442, lithology: "Regolith (megaripple)", organics: null,
+     note: "Fluorescence without a Raman signal. Consistent with rare-earth elements or silica defects; organics cannot be ruled out", source: "PDS Initial Reports vol.2; Herd 2025"}
+  - {id: S11, name: "Berea (Solva)", cores: ["Melyn"], lon_e: 77.38394465, lat_n: 18.47021736, lithology: "Medium-grained sandstone, carbonate-bearing, fluvial", organics: null,
+     note: "Weak fluorescence (inorganic or aromatic). No Raman signal of organics", source: "PDS Initial Reports vol.3"}
+  - {id: DEPOT, name: "Three Forks sample depot", cores: ["10 tubes (duplicates)"], lon_e: 77.40823, lat_n: 18.45296, lithology: "", organics: null,
+     note: "Where 10 tubes were set down in 2022-12 to 2023-01 (centre of the area)", source: "PDS mars2020_sample_depot_three_forks; NASA 2023-01-30"}

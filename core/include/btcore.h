@@ -29,7 +29,7 @@ extern "C" {
 #  define BT_API
 #endif
 
-#define BT_ABI_VERSION 5u
+#define BT_ABI_VERSION 6u
 
 /* ── 용량 상수 ─────────────────────────────────────────────────────────── */
 #define BT_MAX_OPTIONS     3
@@ -80,8 +80,13 @@ enum { BT_LINK_FULL = 0, BT_LINK_LOCAL = 1 };           /* bt_state.link_mode, b
 enum { BT_STOP_POI = 0, BT_STOP_HYP_TARGET = 1, BT_STOP_LANDMARK = 2, BT_STOP_ROVER = 3 };   /* bt_stop.purpose */
 
 enum { BT_OPT_ROUTE = 0, BT_OPT_STAY = 1, BT_OPT_RETURN = 2 };                               /* bt_option.kind */
-enum { BT_LABEL_CONTINUE_PLAN = 0, BT_LABEL_HYP_TARGET = 1, BT_LABEL_RESTORE_PLAN = 2,
-       BT_LABEL_DROP_LAST = 3, BT_LABEL_STAY = 4, BT_LABEL_RETURN_ROVER = 5 };               /* bt_option.label_key */
+/* bt_option.label_key. 번호 = 후보를 만드는 순서(카드의 A·B·C도 이 순서를 따른다).
+ * ROUTE_FASTEST / ROUTE_GENTLE: 경로 갈림길(fork/route)에서만 나온다 — 다음 정지점까지를 다른 성향으로 가는 길.
+ * 그때의 CONTINUE_PLAN이 지금 성향(보통 균형)의 길이다. 정지점은 같고 가는 길만 다르다(bt_stop.profile).
+ * CUSTOM_PLAN: 사람이 직접 짠 정지점 순서(화면의 "경로 재설정"). 트리거가 USER_REQUEST · 원인이 BT_CAUSE_PLAN일 때,
+ * bt_decide의 prev_plan 자리에 넘긴 정지점들을 후보로 계산한다. 고르기 전에는 계획이 바뀌지 않는다 */
+enum { BT_LABEL_CONTINUE_PLAN = 0, BT_LABEL_ROUTE_FASTEST = 1, BT_LABEL_ROUTE_GENTLE = 2, BT_LABEL_HYP_TARGET = 3,
+       BT_LABEL_RESTORE_PLAN = 4, BT_LABEL_CUSTOM_PLAN = 5, BT_LABEL_DROP_LAST = 6, BT_LABEL_STAY = 7, BT_LABEL_RETURN_ROVER = 8 };
 enum { BT_OPTF_FROM_HYPOTHESIS = 1, BT_OPTF_PRIOR_ONLY = 2, BT_OPTF_LATE = 4 };              /* bt_option.flags */
 enum { BT_OVER_MAX_SLOPE = 1, BT_OVER_DOSE = 2 };                                            /* bt_option.over_limit */
 enum { BT_GRADE_LOW = 0, BT_GRADE_MED = 1, BT_GRADE_HIGH = 2 };
@@ -92,9 +97,12 @@ enum { BT_TRIG_FORK = 0, BT_TRIG_ENV = 1, BT_TRIG_LINK_LOST = 2, BT_TRIG_SAFETY 
  * 호스트가 이름을 DecisionPoint.cause에 적는다("spe", "nlt", "sunset", "return", …). */
 enum { BT_CAUSE_ROUTE = 0, BT_CAUSE_OBS = 1, BT_CAUSE_HYP = 2, BT_CAUSE_OTHER = 3,
        BT_CAUSE_SPE = 4, BT_CAUSE_NLT = 5, BT_CAUSE_SUNSET = 6, BT_CAUSE_RETURN = 7,
-       BT_CAUSE_DUST = 8, BT_CAUSE_SHADOW = 9, BT_CAUSE_LINK = 10 };
+       BT_CAUSE_DUST = 8, BT_CAUSE_SHADOW = 9, BT_CAUSE_LINK = 10,
+       BT_CAUSE_PLAN = 11 };            /* 사람이 직접 짠 계획을 견줘 달라고 했다 (USER_REQUEST와 함께) */
 enum { BT_NOTICE_HYP_UNREACHABLE = 1, BT_NOTICE_NO_FEASIBLE_RETURN = 2,
-       BT_NOTICE_HYP_NO_EFFECT = 4 };   /* bt_decision.notices 비트. NO_EFFECT: 가설이 그 방향의 지도 값을 올리지 않아 갈 목표가 없다 */
+       BT_NOTICE_HYP_NO_EFFECT = 4,
+       BT_NOTICE_CUSTOM_UNREACHABLE = 8 };   /* 사람이 짠 계획이 출발 한계 안에 끝나지 않거나 길이 없어 선택지에 넣지 않았다 */
+/* bt_decision.notices 비트. NO_EFFECT: 가설이 그 방향의 지도 값을 올리지 않아 갈 목표가 없다 */
 
 enum { BT_DT_F32 = 0, BT_DT_U16 = 1, BT_DT_U8 = 2, BT_DT_BITS = 3 };                         /* bt_raster.dtype */
 typedef enum { BT_LAYER_SLOPE = 0, BT_LAYER_ELEV = 1, BT_LAYER_ROUGHNESS = 2, BT_LAYER_SHADOW = 3,
@@ -230,7 +238,9 @@ typedef struct {
 } bt_config;
 
 /* ── 경로 ──────────────────────────────────────────────────────────────── */
-typedef struct { bt_xy xy; float dwell_min; uint8_t purpose; uint8_t poi; } bt_stop;
+/* profile: 이 정지점까지 가는 길의 성향(0 균형, 1 가장 빠름, 2 완만함 — bt_config.profiles의 번호). 갈림길에서 사람이 고른 길을
+ * 계획이 기억하는 자리다. _pad는 0 (구조체의 크기는 그대로다 — 빈 자리였던 두 바이트를 쓴다) */
+typedef struct { bt_xy xy; float dwell_min; uint8_t purpose; uint8_t poi; uint8_t profile; uint8_t _pad; } bt_stop;
 typedef struct { uint8_t layer; float value; bt_cell cell; float res_m; } bt_reason;   /* cell.row < 0 이면 칸 없음 */
 typedef struct { float time_min, max_slope_deg, dose_uSv, comm_loss_min, length_m; } bt_path_metrics;
 

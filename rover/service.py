@@ -135,6 +135,12 @@ class RoverService:
                 if self.open_trigger is not None:
                     out += self._decide(self.open_trigger)
             out += self._check_triggers([])
+        elif msg.type == "plan_request":
+            # 사람이 화면에서 직접 짠 순서. 코어가 그 순서를 선택지 하나로 계산해(출발 한계를 넘기면 만들지 않고 알림) 다른 카드와 함께 보낸다
+            if self.crew is not None:
+                tr = bt.BtTrigger()
+                tr.kind, tr.cause_kind = bt.TRIG_USER_REQUEST, bt.CAUSES.index("plan")
+                out += self._decide(tr, list(msg.stops))
         elif msg.type == "sync_up":
             fresh = cv.merge_events(self.core, self.table, list(msg.events))
             self.seq += 1
@@ -281,7 +287,7 @@ class RoverService:
             if key != self._route_key:
                 self._route_key, self._route = key, []
                 if self.plan:
-                    p = self.core.plan(self.crew.pos, self.plan[0].xy)
+                    p = self.core.plan(self.crew.pos, self.plan[0].xy, profile=bt.PROFILES.index(self.plan[0].profile))
                     if p.status >= 0:
                         self._route = [(float(x), float(y)) for x, y in self.core.path_polyline(p)]
             try:

@@ -33,8 +33,8 @@ def build_pois(site: dict, mu0: np.ndarray, var0: np.ndarray, sgrid: Grid) -> li
             "id": p["id"], "name": p.get("name", p["id"]), "xy": [round(x, 1), round(y, 1)], "kind": p.get("kind", "feature"),
             "value_mu": None if math.isnan(mu) else round(mu, 4), "value_var": None if math.isnan(var) else round(var, 4),
             "access_cost_min": None,
-            "source": {"source": "config/site.yaml", "product_id": "임시 배치", "resolution_m": None, "acquired": None,
-                       "license": "", "url": None, "note": "손으로 잡은 지점. 값은 바탕 지도(전문가 검토 전 예시값)에서 읽었다"},
+            "source": {"source": "config/site.yaml", "product_id": "Provisional placement", "resolution_m": None, "acquired": None,
+                       "license": "", "url": None, "note": "Hand-placed site. The value is read from the prior map (a relative index, not a calibrated probability)"},
             "photos": [],
         })
     return out

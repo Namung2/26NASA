@@ -53,7 +53,8 @@ class SimLog:
 
 
 class Sim:
-    def __init__(self, scenario: Scenario, bundle_root: str, *, dt: float = 1.0, params_path: str = "config/params.yaml") -> None:
+    def __init__(self, scenario: Scenario, bundle_root: str, *, dt: float = 1.0, params_path: str = "config/params.yaml",
+                 any_site: bool = False) -> None:
         self.sc, self.dt = scenario, dt
         p = yaml.safe_load(Path(params_path).read_text())
         self.v_plan = float(p["mobility"]["v_plan_kmh"]["value"]) / 3.6
@@ -63,7 +64,8 @@ class Sim:
         fb, rb = hb.load(bundle_root, "field"), hb.load(bundle_root, "rover")
         fb.dose_rate_uSv_h = rb.dose_rate_uSv_h = self.base_dose
         self.fb, self.meta = fb, fb.meta
-        if scenario.site != self.meta["bundle_id"]:
+        # any_site: 시나리오를 다른 구역의 번들로 돌려 본다(지점은 이름 P1·P2·P3와 주차점으로만 가리키므로 구역이 달라도 돈다 — S5 §8)
+        if not any_site and scenario.site != self.meta["bundle_id"]:
             raise ValueError(f"시나리오의 site({scenario.site})가 번들({self.meta['bundle_id']})과 다르다")
         self.pois = {x["id"]: (float(x["xy"][0]), float(x["xy"][1])) for x in self.meta["pois"]}
         park = scenario.start.rover_park

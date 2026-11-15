@@ -66,9 +66,10 @@ class Scene:
 
 def stops(*names: str, dwell_min: float = 10.0) -> list[bt.BtStop]:
     out = []
-    for i, name in enumerate(names):
+    for name in names:
         s = bt.BtStop()
-        s.xy, s.dwell_min, s.purpose, s.poi = bt.BtXY(*mb.POIS[name]), dwell_min, bt.STOP_PURPOSES.index("poi"), i + 1
+        s.xy, s.dwell_min, s.purpose = bt.BtXY(*mb.POIS[name]), dwell_min, bt.STOP_PURPOSES.index("poi")
+        s.poi = sorted(mb.POIS).index(name) + 1          # 지점 번호는 이름으로 정한다(부른 순서가 아니다): P1 = 1, P2 = 2, P3 = 3
         out.append(s)
     return out
 

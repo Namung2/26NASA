@@ -46,17 +46,17 @@ def _params_digest(paths: tuple[str, ...]) -> str:
 
 
 def run_scenario(path: str | Path, *, bundle_root: str = "data/bundles/jezero_west_v1", params_path: str = "config/params.yaml",
-                 keep_log: list | None = None) -> Report:
+                 keep_log: list | None = None, any_site: bool = False) -> Report:
     sc = load_scenario(path)
     if sc.scenario != Path(path).stem:
         raise ValueError(f"시나리오 이름({sc.scenario})이 파일 이름({Path(path).stem})과 다르다")
     t0 = time.time()
-    sim = Sim(sc, bundle_root, params_path=params_path)
+    sim = Sim(sc, bundle_root, params_path=params_path, any_site=any_site)
     log = sim.run()
     wall = time.time() - t0
     rerun = None
     if any("rerun_identical" in e for e in sc.expect):
-        rerun = Sim(sc, bundle_root, params_path=params_path).run().digest()
+        rerun = Sim(sc, bundle_root, params_path=params_path, any_site=any_site).run().digest()
     ctx = Ctx(log=log, scenario=sc, bundle_root=bundle_root, params=yaml.safe_load(Path(params_path).read_text()), rerun_digest=rerun)
     checks: list[CheckResult] = []
     for item in sc.expect:
@@ -95,11 +95,12 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("scenarios", nargs="+")
     ap.add_argument("--bundle", default="data/bundles/jezero_west_v1")
     ap.add_argument("--out", default="reports")
+    ap.add_argument("--any-site", action="store_true", help="시나리오에 적힌 구역이 아닌 번들로도 돌린다(다른 구역 시험용)")
     a = ap.parse_args(argv)
     ok = True
     for path in a.scenarios:
         logs: list = []
-        r = run_scenario(path, bundle_root=a.bundle, keep_log=logs)
+        r = run_scenario(path, bundle_root=a.bundle, keep_log=logs, any_site=a.any_site)
         md = write_report(r, a.out)
         logs[0].to_jsonl(Path(a.out) / f"{r.scenario}.jsonl")
         print(f"{'통과' if r.passed else '실패'}  {r.scenario}  (EVA {r.eva_end_min:.0f}분에 끝, 결정 지점 {r.n_dp}개, {r.wall_s}초) → {md}")

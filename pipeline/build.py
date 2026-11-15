@@ -162,7 +162,7 @@ def run(site_path: str, out_dir: str, params_path: str = "config/params.yaml", t
         minerals, _conf = layers.load_minerals(site, sgrid, shift)
         minerals.tofile(out / "field/minerals.u8")
         layer_list.append(bundle.layer_meta("minerals", "field/minerals.u8", "u8", sgrid, "class", bundle.source_ref(
-            products["minerals"], "신경망 분류 결과. 광물 이름은 가장 가까운 것으로 붙인 것이다(저자 readme). 번호는 pipeline/layers.py MINERAL_CLASSES"), "minerals", nodata=0))
+            products["minerals"], "Neural-network classification. Mineral names are the nearest match (author's readme). Codes: pipeline/layers.py MINERAL_CLASSES"), "minerals", nodata=0))
     else:
         missing.append("minerals")
     if has_geo:
@@ -184,13 +184,13 @@ def run(site_path: str, out_dir: str, params_path: str = "config/params.yaml", t
             register.overlay_png(str(out / "qa/units_on_reference.png"), products["reference_image"]["path"], site,
                                  layers.unit_rings(site, None), layers.unit_rings(site, fit))
         layer_list.append(bundle.layer_meta("units", "field/units.u8", "u8", sgrid, "class", bundle.source_ref(
-            geo, "폴리곤을 정합 결과(메타의 registration.units)로 옮겨 고도 자료에 맞췄다. 번호는 pipeline/layers.py UNIT_CODES"), "units", nodata=0))
+            geo, "Polygons were moved by the registration result (registration.units in the metadata) to match the elevation data. Codes: pipeline/layers.py UNIT_CODES"), "units", nodata=0))
     else:
         missing.append("geology")
     mu0, var0, grade_bins = prior.rasterize(units, minerals, table, (sgrid.h, sgrid.w))
     bundle.write_f16(out / "field/mu0.f16", mu0)
     bundle.write_f16(out / "field/var0.f16", var0)
-    src_prior = {"source": "config/prior_table.yaml", "product_id": "과학 가치 바탕표", "resolution_m": sres, "acquired": None,
+    src_prior = {"source": "config/prior_table.yaml", "product_id": "Science value prior table", "resolution_m": sres, "acquired": None,
                  "license": "", "url": None, "note": str(table.get("status", ""))}
     registration["prior"] = {"method": "지질 단위와 광물 레이어에서 계산한 것 — 두 레이어의 정합을 그대로 물려받는다",
                              "after_m": (registration.get("units") or {}).get("after_m")}

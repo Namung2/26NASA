@@ -847,26 +847,32 @@ bt_status bt_return_path(bt_ctx* c, bt_field_id id, bt_xy start, bt_path* out) {
   float t0 = v.time[static_cast<uint64_t>(r) * v.geom.w + static_cast<uint64_t>(col)];
   if (!(t0 < F_INF)) {
     // 선 칸이 귀환 지도에서 "갈 수 없는 칸"이다. 귀환 지도는 로버의 거친 격자로 만든 것이라, 기기의 격자로는 걸을 수 있는 좁은 길이
-    // 여기서는 막힌 칸으로 찍힐 수 있다. 출발 한계(bt_depart_limit)는 이럴 때 가장 가까운 "갈 수 있는 칸"의 값으로 물러난다 —
-    // 귀환 경로도 같은 칸에서 시작해 낸다(둘이 어긋나면 화면에 출발 한계는 있는데 귀환 경로가 없거나 그 반대가 된다).
-    // 찾는 범위는 snap_max_m까지. 그 안에 없으면 정말 길이 없다. 옮긴 거리는 snapped_m에 적는다
+    // 여기서는 막힌 칸으로 찍힐 수 있다. 출발 한계(bt_depart_limit)는 이럴 때 가까운 "갈 수 있는 칸"의 값으로 물러난다 —
+    // 귀환 경로도 같은 기준으로 고른 칸에서 시작해 낸다(둘이 어긋나면 화면에 출발 한계는 있는데 귀환 경로가 없거나 그 반대가 된다).
+    // 고르는 기준: snap_max_m 안에서 "거기까지 걷는 시간 + 거기서 로버까지의 시간"이 가장 작은 칸. 그냥 가장 가까운 칸을 고르면
+    // 지나온 쪽의 칸이 뽑혀 경로가 뒤로 향할 수 있다(걷는 사람이 앞뒤로 오가며 제자리에 선다 — 2026-11-15에 실제로 났다).
+    // 동률이면 로버에 더 가까운(시간이 작은) 칸. 찾지 못하면 정말 길이 없다. 옮긴 거리는 snapped_m에 적는다
     const int32_t maxk = static_cast<int32_t>(std::ceil(static_cast<double>(c->cfg.snap_max_m) / v.geom.res));
-    double best = D_INF;
-    int32_t br = -1, bc = -1;
     const double lim2 = static_cast<double>(maxk) * maxk;       // 직선거리로 snap_max_m 안
+    const double v_ret = static_cast<double>(c->cfg.v_return_kmh) / 3.6;
+    double best = D_INF, best_t = D_INF, best_d2 = 0.0;
+    int32_t br = -1, bc = -1;
     for (int32_t dr = -maxk; dr <= maxk; ++dr) {                 // 상한: (2·snap_max_m / 칸 크기 + 1)² 칸
       for (int32_t dc = -maxk; dc <= maxk; ++dc) {
         const int32_t rr = r + dr, cc = col + dc;
         if (rr < 0 || cc < 0 || rr >= static_cast<int32_t>(v.geom.h) || cc >= static_cast<int32_t>(v.geom.w)) continue;
-        if (!(v.time[static_cast<uint64_t>(rr) * v.geom.w + static_cast<uint64_t>(cc)] < F_INF)) continue;
+        const float tc = v.time[static_cast<uint64_t>(rr) * v.geom.w + static_cast<uint64_t>(cc)];
+        if (!(tc < F_INF)) continue;
         const double d2 = static_cast<double>(dr) * dr + static_cast<double>(dc) * dc;
-        if (d2 <= lim2 && d2 < best) { best = d2; br = rr; bc = cc; }   // 가장 가까운 칸. 동률은 먼저 본 칸(북서쪽부터)
+        if (d2 > lim2) continue;
+        const double total = static_cast<double>(tc) + std::sqrt(d2) * v.geom.res / v_ret;
+        if (total < best || (total == best && static_cast<double>(tc) < best_t)) { best = total; best_t = tc; best_d2 = d2; br = rr; bc = cc; }
       }
     }
     if (br < 0) return BT_ERR_UNREACHABLE;
     r = br; col = bc;
     t0 = v.time[static_cast<uint64_t>(r) * v.geom.w + static_cast<uint64_t>(col)];
-    out->snapped_m = std::sqrt(best) * v.geom.res;
+    out->snapped_m = std::sqrt(best_d2) * v.geom.res;
   }
   double length = 0.0;
   uint32_t len = 0;
